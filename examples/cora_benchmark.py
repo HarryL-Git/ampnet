@@ -4,18 +4,23 @@
 #
 # @author Rahul Dhodapkar
 
-from src.ampnet.utils.preprocess import embed_features
+import numpy as np
 
+from src.ampnet.utils.preprocess import embed_features
 
 from torch_geometric.datasets import Planetoid
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from src.ampnet.conv.amp_conv import AMPConv
-from torch_geometric.datasets import TUDataset
+from torch_geometric.loader import GraphSAINTRandomWalkSampler
 
-dataset = Planetoid(root='/tmp/Cora', name='Cora')
 
+############################
+def accuracy(v1, v2):
+    return (v1 == v2).sum() / v1.shape[0]
+
+############################
 
 class AMPGCN(torch.nn.Module):
     def __init__(self):
@@ -60,19 +65,40 @@ class GCN(torch.nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #model = GCN().to(device)
 model = AMPGCN().to(device)
-data = dataset[0].to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
 
+dataset = Planetoid(root='/tmp/Cora', name='Cora')
+
 model.train()
-for epoch in range(200):
-    print("epoch {}".format(epoch))
-    optimizer.zero_grad()
-    out = model(data)
-    loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask])
-    loss.backward()
-    optimizer.step()
+for epoch in range(5):
+    loader = GraphSAINTRandomWalkSampler(dataset[0], batch_size=20, walk_length=2,
+                                         num_steps=5, sample_coverage=100)
+
+    partition_ix = 0
+    for data_obj in loader:
+        data = data_obj.to(device)
+
+        optimizer.zero_grad()
+        out = model(data)
+        train_loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask])
+        train_accuracy = accuracy(out[data.train_mask].argmax(dim=1).numpy(),
+                                  data.y[data.train_mask].detach().numpy())
+
+        test_loss = F.nll_loss(out[data.test_mask], data.y[data.test_mask])
+        test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).numpy(),
+                                 data.y[data.test_mask].detach().numpy())
+
+        print("Epoch {:05d} Partition {:05d} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} ".format(
+            epoch, partition_ix
+            , train_loss.item(), train_accuracy
+            , test_loss.item(), test_accuracy))
+
+        train_loss.backward()
+        optimizer.step()
+        partition_ix = partition_ix + 1
 
 
+data = dataset[0]
 model.eval()
 pred = model(data).argmax(dim=1)
 correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()

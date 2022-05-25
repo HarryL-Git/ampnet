@@ -11,12 +11,8 @@ import torch.nn.functional as F
 import torch_geometric.transforms as T
 from torch_geometric.nn import GCNConv
 from torch.nn import Linear
-from torch_geometric.datasets import Planetoid
 
 from src.ampnet.conv.amp_conv import AMPConv
-from src.ampnet.utils.preprocess import embed_features
-
-from torch_geometric.loader import GraphSAINTRandomWalkSampler
 
 # for reproducibility
 np.random.seed(seed=1)
@@ -67,17 +63,6 @@ transform = T.RandomNodeSplit(
         num_test=20
     )
 data = transform(data)
-
-############################
-
-dataset = Planetoid(root='/tmp/Cora', name='Cora')
-data = dataset[0]
-
-loader = GraphSAINTRandomWalkSampler(data, batch_size=20, walk_length=2,
-                                     num_steps=5, sample_coverage=100)
-for data in loader:
-    data = data
-    break
 
 
 class AMPGCN(torch.nn.Module):
