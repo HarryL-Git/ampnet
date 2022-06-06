@@ -89,14 +89,14 @@ class GCN(torch.nn.Module):
         self.conv2 = GCNConv(16, dataset.num_classes)
 
         self.act1 = nn.ReLU()
-        self.norm1 = nn.BatchNorm1d(dataset.num_node_features * 5)
+        # self.norm1 = nn.BatchNorm1d(dataset.num_node_features * 5)
         self.drop1 = nn.Dropout(p=0.5)
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
         x = embed_features(x, feature_embed_dim=4, value_embed_dim=1)  # x becomes [2708, 7165]
 
-        x = self.norm1(x)  # Added batch norm to try and help vanishing gradients
+        # x = self.norm1(x)  # Added batch norm to try and help vanishing gradients
         x = self.conv1(x, edge_index)
         x = self.act1(x)
         x = self.drop1(x)
