@@ -24,9 +24,9 @@ from torch_geometric.nn import GCNConv, GATConv, SAGEConv
 from src.ampnet.conv.amp_conv import AMPConv
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
 
-
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
+SAVE_PATH = "./experiments/runs"
 
 
 def accuracy(v1, v2):
@@ -70,19 +70,19 @@ def plot_acc_curves(train_accs, val_accs, epoch_count, save_path, model_name):
 class AMPGCN(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        # self.convs = torch.nn.ModuleList()
         self.conv1 = AMPConv(embed_dim=6, num_heads=2)
-        self.conv2 = AMPConv(embed_dim=6, num_heads=2)
-
-        self.act1 = nn.ReLU()
-        # self.act2 = nn.ReLU()
-        self.drop1 = nn.Dropout(p=0.5)
-        # self.drop2 = nn.Dropout(p=0.5)
         self.norm1 = nn.BatchNorm1d(dataset.num_node_features * 6)
-        self.norm2 = nn.BatchNorm1d(dataset.num_node_features * 6)
-
+        self.act1 = nn.ReLU()
+        self.drop1 = nn.Dropout(p=0.5)
         self.lin1 = nn.Linear(in_features=dataset.num_node_features * 6, out_features=dataset.num_classes)
+
+        # self.convs = torch.nn.ModuleList()
+        # self.conv2 = AMPConv(embed_dim=6, num_heads=2)
+        # self.norm2 = nn.BatchNorm1d(dataset.num_node_features * 6)
+        # self.act2 = nn.ReLU()
+        # self.drop2 = nn.Dropout(p=0.5)
         # self.lin2 = nn.Linear(in_features=16, out_features=dataset.num_classes)
+
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x becomes [num_nodes, 1433]
@@ -92,9 +92,9 @@ class AMPGCN(torch.nn.Module):
         x = self.norm1(x)
         x = self.act1(x)
         x = self.drop1(x)
-        x = self.conv2(x, edge_index)
+        # x = self.conv2(x, edge_index)
         
-        x = self.norm2(x)
+        # x = self.norm2(x)
         # x = self.act2(x)
         # x = self.drop2(x)
         x = self.lin1(x)
@@ -183,11 +183,11 @@ class AMPGCN(torch.nn.Module):
             x = self.act1(x)
             activations["ReLU 1"] = x.view(-1).numpy()
             x = self.drop1(x)
-            x = self.conv2(x, edge_index)
-            activations["AmpConv Layer 2"] = x.view(-1).numpy()
+            # x = self.conv2(x, edge_index)
+            # activations["AmpConv Layer 2"] = x.view(-1).numpy()
 
-            x = self.norm2(x)
-            activations["BatchNorm 2"] = x.view(-1).numpy()
+            # x = self.norm2(x)
+            # activations["BatchNorm 2"] = x.view(-1).numpy()
             x = self.lin1(x)
             activations["Linear Layer 1"] = x.view(-1).numpy()
             # x = self.drop2(x)
@@ -336,10 +336,10 @@ class GCN(torch.nn.Module):
         plt.close()
 
 # Create save paths
-if not os.path.exists("./runs"):
-    os.mkdir("./runs")
+if not os.path.exists(SAVE_PATH):
+    os.mkdir(SAVE_PATH)
 
-SAVE_PATH = os.path.join("./runs", datetime.datetime.now().strftime('%Y-%m-%d-%H_%M_%S'))
+SAVE_PATH = os.path.join(SAVE_PATH, datetime.datetime.now().strftime('%Y-%m-%d-%H_%M_%S'))
 GRADS_PATH = os.path.join(SAVE_PATH, "gradients")
 ACTIV_PATH = os.path.join(SAVE_PATH, "activations")
 if not os.path.exists(SAVE_PATH):
@@ -361,17 +361,17 @@ if TRAIN_AMPCONV:
 else:
     model = GCN().to(device)
 
-loader = GraphSAINTRandomWalkSampler(all_data, batch_size=90, walk_length=3,
+loader = GraphSAINTRandomWalkSampler(all_data, batch_size=100, walk_length=3,
                                      num_steps=10, sample_coverage=100)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)  # 
 start_time = time.time()
 train_loss_list = []
 train_acc_list = []
 test_loss_list = []
 test_acc_list = []
 
-epochs = 20
+epochs = 10
 for epoch in range(epochs):
 
     total_loss = total_examples = 0
