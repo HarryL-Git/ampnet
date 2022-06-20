@@ -25,7 +25,7 @@ from src.ampnet.conv.amp_conv import AMPConv
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
 
 # Global variables
-TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
+TRAIN_AMPCONV = False  # If False, trains a simple 2-layer GCN
 SAVE_PATH = "./experiments/runs"
 
 
@@ -86,7 +86,7 @@ class AMPGCN(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x becomes [num_nodes, 1433]
-        x = embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [num_nodes, 8598]
+        x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)  # x becomes [num_nodes, 8598]
         x = self.conv1(x, edge_index)
 
         x = self.norm1(x)
@@ -173,7 +173,7 @@ class AMPGCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
-            x = embed_features(x, feature_embed_dim=5, value_embed_dim=1)
+            x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
             x = self.conv1(x, edge_index)
@@ -216,7 +216,7 @@ class AMPGCN(torch.nn.Module):
 class GCN(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = GCNConv(dataset.num_node_features * 6, 16)
+        self.conv1 = GCNConv(140, 16)
         self.conv2 = GCNConv(16, dataset.num_classes)
 
         self.act1 = nn.ReLU()
@@ -225,7 +225,7 @@ class GCN(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
-        x = embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [2708, 8598]
+        x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)  # x becomes [2708, 20 * (feat_emb_dim + value_emb_dim + 1)]
 
         # x = self.norm1(x)  # Added batch norm to try and help vanishing gradients
         x = self.conv1(x, edge_index)
@@ -307,7 +307,7 @@ class GCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
-            x = embed_features(x, feature_embed_dim=5, value_embed_dim=1)
+            x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
             x = self.conv1(x, edge_index)
