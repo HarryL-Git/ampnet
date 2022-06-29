@@ -26,7 +26,8 @@ class AMPConv(torch_geometric.nn.MessagePassing):
         # )
 
     def forward(self, x, edge_index):
-        return self.propagate(edge_index, x=x)
+        out = self.propagate(edge_index, x=x)
+        return out
 
     def message(self, x_i, x_j):
         if x_i.shape[1] % self.embed_dim != 0:

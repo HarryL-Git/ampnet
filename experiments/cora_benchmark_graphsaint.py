@@ -25,7 +25,7 @@ from src.ampnet.conv.amp_conv import AMPConv
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
 
 # Global variables
-TRAIN_AMPCONV = False  # If False, trains a simple 2-layer GCN
+TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
 SAVE_PATH = "./experiments/runs"
 
 
@@ -70,33 +70,38 @@ def plot_acc_curves(train_accs, val_accs, epoch_count, save_path, model_name):
 class AMPGCN(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = AMPConv(embed_dim=6, num_heads=2)
-        self.norm1 = nn.BatchNorm1d(dataset.num_node_features * 6)
+        self.emb_dim = 50
+        self.conv1 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
+        self.norm1 = nn.BatchNorm1d(1000)
         self.act1 = nn.ReLU()
         self.drop1 = nn.Dropout(p=0.5)
-        self.lin1 = nn.Linear(in_features=dataset.num_node_features * 6, out_features=dataset.num_classes)
 
-        # self.convs = torch.nn.ModuleList()
-        # self.conv2 = AMPConv(embed_dim=6, num_heads=2)
-        # self.norm2 = nn.BatchNorm1d(dataset.num_node_features * 6)
-        # self.act2 = nn.ReLU()
-        # self.drop2 = nn.Dropout(p=0.5)
+        self.conv2 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
+        self.norm2 = nn.BatchNorm1d(1000)
+        self.act2 = nn.ReLU()
+        self.drop2 = nn.Dropout(p=0.5)
+
+        self.lin1 = nn.Linear(self.emb_dim, out_features=dataset.num_classes)
         # self.lin2 = nn.Linear(in_features=16, out_features=dataset.num_classes)
 
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x becomes [num_nodes, 1433]
-        x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)  # x becomes [num_nodes, 8598]
+        x = embed_features(x, feature_emb_dim=self.emb_dim, value_emb_dim=0)  # x becomes [num_nodes, 1000]
         x = self.conv1(x, edge_index)
-
         x = self.norm1(x)
         x = self.act1(x)
         x = self.drop1(x)
-        # x = self.conv2(x, edge_index)
-        
-        # x = self.norm2(x)
-        # x = self.act2(x)
-        # x = self.drop2(x)
+
+        x = self.conv2(x, edge_index)
+        x = self.norm2(x)
+        x = self.act2(x)
+        x = self.drop2(x)
+
+        # Reshape node features into unrolled list of feature vectors, perform average pooling
+        x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+        x = x.mean(dim=1)  # Average pooling
+
         x = self.lin1(x)
         # x = self.lin2(x)
         return F.log_softmax(x, dim=1)
@@ -173,7 +178,7 @@ class AMPGCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
-            x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)
+            x = embed_features(x, feature_emb_dim=self.emb_dim, value_emb_dim=0)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
             x = self.conv1(x, edge_index)
@@ -183,16 +188,20 @@ class AMPGCN(torch.nn.Module):
             x = self.act1(x)
             activations["ReLU 1"] = x.view(-1).numpy()
             x = self.drop1(x)
-            # x = self.conv2(x, edge_index)
-            # activations["AmpConv Layer 2"] = x.view(-1).numpy()
 
-            # x = self.norm2(x)
-            # activations["BatchNorm 2"] = x.view(-1).numpy()
+            x = self.conv2(x, edge_index)
+            activations["AmpConv Layer 2"] = x.view(-1).numpy()
+            x = self.norm2(x)
+            activations["BatchNorm 2"] = x.view(-1).numpy()
+            x = self.act2(x)
+            activations["ReLU 2"] = x.view(-1).numpy()
+            x = self.drop2(x)
+
+            x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+            x = x.mean(dim=1)
+
             x = self.lin1(x)
             activations["Linear Layer 1"] = x.view(-1).numpy()
-            # x = self.drop2(x)
-            # x = self.act2(x)
-            # activations["ReLU 2"] = x.view(-1).numpy()
             # x = self.lin2(x)
             # activations["Linear Layer 2"] = x.view(-1).numpy()
 
@@ -216,7 +225,7 @@ class AMPGCN(torch.nn.Module):
 class GCN(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = GCNConv(140, 16)
+        self.conv1 = GCNConv(600, 16)
         self.conv2 = GCNConv(16, dataset.num_classes)
 
         self.act1 = nn.ReLU()
@@ -225,7 +234,7 @@ class GCN(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
-        x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)  # x becomes [2708, 20 * (feat_emb_dim + value_emb_dim + 1)]
+        x = embed_features(x, feature_emb_dim=30, value_emb_dim=0)  # x becomes [2708, 20 * (feat_emb_dim + value_emb_dim + 1)]
 
         # x = self.norm1(x)  # Added batch norm to try and help vanishing gradients
         x = self.conv1(x, edge_index)
@@ -307,7 +316,7 @@ class GCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
-            x = embed_features(x, feature_emb_dim=5, value_emb_dim=1)
+            x = embed_features(x, feature_emb_dim=30, value_emb_dim=0)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
             x = self.conv1(x, edge_index)
@@ -361,7 +370,7 @@ if TRAIN_AMPCONV:
 else:
     model = GCN().to(device)
 
-loader = GraphSAINTRandomWalkSampler(all_data, batch_size=100, walk_length=3,
+loader = GraphSAINTRandomWalkSampler(all_data, batch_size=150, walk_length=4,
                                      num_steps=10, sample_coverage=100)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)  # 

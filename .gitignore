@@ -62,6 +62,6 @@ coverage.xml
 .pytest_cache/
 cover/
 
-
+.gitignore
 runs/
-
+runs_PCA/
