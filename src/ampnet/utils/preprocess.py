@@ -5,11 +5,10 @@ from umap import UMAP
 from sklearn.preprocessing import StandardScaler
 
 
-def embed_features(x, feature_emb_dim=30, value_emb_dim=0):
+def embed_features(x, feature_emb_dim=30, value_emb_dim=0, num_sampled_vectors=20):
     umap_fit = UMAP(n_neighbors=15, n_components=feature_emb_dim, min_dist=0.1, metric='euclidean')
     scaler = StandardScaler()
     emb_dim = feature_emb_dim + value_emb_dim
-    num_sampled_vectors = 20
 
     # Feature Embedding: Perform UMAP dim reduction on transpose of nodes x features matrix
     # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
@@ -33,7 +32,7 @@ def embed_features(x, feature_emb_dim=30, value_emb_dim=0):
 
         # Append sampled feature vector identity indices, so model has some indication of what was sampled
         # sampled_feature_idxs_torch = torch.from_numpy(sampled_feature_idxs).unsqueeze(dim=-1)
-        # sampled_vectors = torch.cat((sampled_vectors, sampled_feature_idxs_torch), dim=1)
+        # sampled_vectors = torch.cat((class_vector, sampled_vectors), dim=0)
         sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
     sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
 

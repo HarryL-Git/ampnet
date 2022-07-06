@@ -68,39 +68,68 @@ def plot_acc_curves(train_accs, val_accs, epoch_count, save_path, model_name):
 
 
 class AMPGCN(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, embedding_dim=768, num_sampled_vectors=20, average_pooling_flag=True):
         super().__init__()
-        self.emb_dim = 50
+        self.emb_dim = embedding_dim
+        self.num_sampled_vectors = num_sampled_vectors
+        self.average_pooling_flag = average_pooling_flag
+        channels = 20 * 768 if average_pooling_flag else 21 * 768
+        if not average_pooling_flag:
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
+            self.initialize_weights()
+
         self.conv1 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
-        self.norm1 = nn.BatchNorm1d(1000)
+        self.norm1 = nn.BatchNorm1d(channels)
         self.act1 = nn.ReLU()
-        self.drop1 = nn.Dropout(p=0.5)
+        # self.drop1 = nn.Dropout(p=0.5)
 
         self.conv2 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
-        self.norm2 = nn.BatchNorm1d(1000)
+        self.norm2 = nn.BatchNorm1d(channels)
         self.act2 = nn.ReLU()
-        self.drop2 = nn.Dropout(p=0.5)
+        # self.drop2 = nn.Dropout(p=0.5)
+
+        self.conv3 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
+        self.norm3 = nn.BatchNorm1d(channels)
+        self.act3 = nn.ReLU()
 
         self.lin1 = nn.Linear(self.emb_dim, out_features=dataset.num_classes)
         # self.lin2 = nn.Linear(in_features=16, out_features=dataset.num_classes)
 
 
+    def initialize_weights(self):
+        nn.init.normal_(self.cls_token, std=.02)
+
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x becomes [num_nodes, 1433]
         x = embed_features(x, feature_emb_dim=self.emb_dim, value_emb_dim=0)  # x becomes [num_nodes, 1000]
+        
+        # Append class token
+        if not self.average_pooling_flag:
+            x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # x -> [num_nodes]
+            cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
+            x = torch.cat((cls_tokens, x), dim=1)
+            x = torch.reshape(x, (x.shape[0], (self.num_sampled_vectors + 1) * self.emb_dim))
+
         x = self.conv1(x, edge_index)
         x = self.norm1(x)
         x = self.act1(x)
-        x = self.drop1(x)
+        # x = self.drop1(x)
 
         x = self.conv2(x, edge_index)
         x = self.norm2(x)
         x = self.act2(x)
-        x = self.drop2(x)
+        # x = self.drop2(x)
+
+        x = self.conv3(x, edge_index)
+        x = self.norm3(x)
+        x = self.act3(x)
 
         # Reshape node features into unrolled list of feature vectors, perform average pooling
         x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-        x = x.mean(dim=1)  # Average pooling
+        if self.average_pooling_flag:
+            x = x.mean(dim=1)  # Average pooling
+        else:
+            x = x[:,0]
 
         x = self.lin1(x)
         # x = self.lin2(x)
@@ -117,8 +146,11 @@ class AMPGCN(torch.nn.Module):
         if not os.path.exists(gradient_distrib_save_path):
             os.mkdir(gradient_distrib_save_path)
         
-        columns = len(grads)
-        fig, ax = plt.subplots(1, columns, figsize=(columns*4, 4))
+        # columns = len(grads)
+        # fig, ax = plt.subplots(1, columns, figsize=(columns*4, 4))
+        columns = 6
+        rows = math.ceil(len(grads)/columns)
+        fig, ax = plt.subplots(rows, columns, figsize=(columns*2.7, rows*2.5))
         fig_index = 0
         for key in grads:
             key_ax = ax[fig_index%columns]
@@ -181,13 +213,19 @@ class AMPGCN(torch.nn.Module):
             x = embed_features(x, feature_emb_dim=self.emb_dim, value_emb_dim=0)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
+            if not self.average_pooling_flag:
+                x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # x -> [num_nodes]
+                cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
+                x = torch.cat((cls_tokens, x), dim=1)
+                x = torch.reshape(x, (x.shape[0], (self.num_sampled_vectors + 1) * self.emb_dim))
+
             x = self.conv1(x, edge_index)
             activations["AMPConv Layer 1"] = x.view(-1).numpy()
             x = self.norm1(x)
             activations["BatchNorm 1"] = x.view(-1).numpy()
             x = self.act1(x)
             activations["ReLU 1"] = x.view(-1).numpy()
-            x = self.drop1(x)
+            # x = self.drop1(x)
 
             x = self.conv2(x, edge_index)
             activations["AmpConv Layer 2"] = x.view(-1).numpy()
@@ -195,7 +233,20 @@ class AMPGCN(torch.nn.Module):
             activations["BatchNorm 2"] = x.view(-1).numpy()
             x = self.act2(x)
             activations["ReLU 2"] = x.view(-1).numpy()
-            x = self.drop2(x)
+            # x = self.drop2(x)
+
+            x = self.conv3(x, edge_index)
+            activations["AmpConv Layer 3"] = x.view(-1).numpy()
+            x = self.norm3(x)
+            activations["BatchNorm 3"] = x.view(-1).numpy()
+            x = self.act3(x)
+            activations["ReLU 3"] = x.view(-1).numpy()
+
+            x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+            if self.average_pooling_flag:
+                x = x.mean(dim=1)  # Average pooling
+            else:
+                x = x[:,0]
 
             x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
             x = x.mean(dim=1)
@@ -370,7 +421,10 @@ if TRAIN_AMPCONV:
 else:
     model = GCN().to(device)
 
-loader = GraphSAINTRandomWalkSampler(all_data, batch_size=150, walk_length=4,
+# batch size 1, walk length 500 => ~225 nodes
+# batch size 20, walk length 100 => ~750 nodes
+# batch size 10, walk length 100 => ~500 nodes
+loader = GraphSAINTRandomWalkSampler(all_data, batch_size=10, walk_length=100,
                                      num_steps=10, sample_coverage=100)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)  # 
