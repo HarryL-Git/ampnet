@@ -35,7 +35,7 @@ class MultiheadAttBlock(nn.Module):
 
 
 class AMPConv(torch_geometric.nn.MessagePassing):
-    def __init__(self, embed_dim, num_heads):  # in_channels
+    def __init__(self, embed_dim, num_heads):
         super().__init__(aggr='mean')
         self.attn_output_weights = None
         self.attn_output = None
@@ -46,8 +46,6 @@ class AMPConv(torch_geometric.nn.MessagePassing):
         self.MABlock2 = MultiheadAttBlock(embed_dim=embed_dim, num_heads=num_heads)
         self.MABlock3 = MultiheadAttBlock(embed_dim=embed_dim, num_heads=num_heads)
         
-        
-
     def forward(self, x, edge_index):
         out = self.propagate(edge_index, x=x)
         return out
@@ -69,9 +67,9 @@ class AMPConv(torch_geometric.nn.MessagePassing):
         return output_reshape
 
 
-"""
-class AMPConv(torch_geometric.nn.MessagePassing):
-    def __init__(self, embed_dim, num_heads):  # in_channels
+
+class AMPConvOneBlock(torch_geometric.nn.MessagePassing):
+    def __init__(self, embed_dim, num_heads):
         super().__init__(aggr='mean')
         self.attn_output_weights = None
         self.attn_output = None
@@ -107,4 +105,3 @@ class AMPConv(torch_geometric.nn.MessagePassing):
         output_reshape = torch.reshape(self.attn_output, (x_i.shape[0], x_i.shape[1]))
 
         return output_reshape
-"""

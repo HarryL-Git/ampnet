@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-#
-# Intended as a simple benchmark of the AMPNetClassifier against the Cora data set
-#
-# @author Rahul Dhodapkar
-
 import os
 import math
 import time
@@ -23,10 +17,12 @@ from torch_geometric.datasets import Planetoid
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv
 from src.ampnet.conv.amp_conv import AMPConv
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
+from torch_geometric.utils.dropout import dropout_adj
+
 
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
-SAVE_PATH = "./experiments/runs"
+SAVE_PATH = "./experiments/runs_embedding_table_overfit_subgraph"
 
 
 def accuracy(v1, v2):
@@ -74,7 +70,11 @@ class AMPGCN(torch.nn.Module):
         self.emb_dim = embedding_dim
         self.num_sampled_vectors = num_sampled_vectors
         self.average_pooling_flag = average_pooling_flag
+        self.training = True
         channels = 20 * 768 if average_pooling_flag else 21 * 768
+
+        self.feature_embedding_table = nn.Embedding(num_embeddings=1433, embedding_dim=768)
+
         if not average_pooling_flag:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
             self.initialize_weights()
@@ -96,13 +96,26 @@ class AMPGCN(torch.nn.Module):
         self.lin1 = nn.Linear(self.emb_dim, out_features=dataset.num_classes)
         # self.lin2 = nn.Linear(in_features=16, out_features=dataset.num_classes)
 
-
     def initialize_weights(self):
         nn.init.normal_(self.cls_token, std=.02)
+    
+    def embed_and_downsample_features(self, x, num_sampled_vectors=20):
+        # x shape: [num_nodes, 1433]. Sample 20 feature vectors per node where binary value != 0
+        sampled_node_vectors_unrolled = []
+        for node_idx in range(x.shape[0]):
+            present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
+            sampled_feature_idxs = np.random.choice(present_feat_idxs, size=num_sampled_vectors, replace=True)
+            sampled_vectors = self.feature_embedding_table.weight[sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
+            sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
+
+        sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
+        node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], num_sampled_vectors * self.emb_dim))
+        return node_vectors_rerolled
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x becomes [num_nodes, 1433]
-        x = embed_features(x, feature_emb_dim=self.emb_dim, value_emb_dim=0)  # x becomes [num_nodes, 1000]
+        edge_index = dropout_adj(edge_index=edge_index, p=0.3, training=self.training)[0]
+        x = self.embed_and_downsample_features(x)  # x becomes [num_nodes, 20 * 768]
         
         # Append class token
         if not self.average_pooling_flag:
@@ -136,7 +149,7 @@ class AMPGCN(torch.nn.Module):
         # x = self.lin2(x)
         return F.log_softmax(x, dim=1)
     
-    def visualize_gradients(self, save_path, epoch_idx, iter, color="C0"):
+    def visualize_gradients(self, save_path, epoch_idx, color="C0"):
         """
         Visualization code partly taken from the notebook tutorial at
         https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial3/Activation_Functions.html
@@ -154,7 +167,7 @@ class AMPGCN(torch.nn.Module):
         fig, ax = plt.subplots(rows, columns, figsize=(columns*2.7, rows*2.5))
         fig_index = 0
         for key in grads:
-            key_ax = ax[fig_index%columns]
+            key_ax = ax[fig_index//columns][fig_index%columns]
             sns.histplot(data=grads[key], bins=30, ax=key_ax, color=color, kde=True)
             mean = grads[key].mean()
             median = grads[key].median()
@@ -166,10 +179,10 @@ class AMPGCN(torch.nn.Module):
         fig.suptitle(f"Gradient Magnitude Distribution", fontsize=14, y=1.05)
         fig.subplots_adjust(wspace=0.45)
         plt.tight_layout()
-        plt.savefig(os.path.join(gradient_distrib_save_path, "gradient_distrib_epoch{}_itr{}".format(epoch_idx, iter)), bbox_inches='tight', facecolor="white")
+        plt.savefig(os.path.join(gradient_distrib_save_path, "gradient_distrib_epoch{}".format(epoch_idx)), bbox_inches='tight', facecolor="white")
         plt.close()
     
-    def plot_grad_flow(self, save_path, epoch_idx, iter):
+    def plot_grad_flow(self, save_path, epoch_idx):
         """
         Plots the gradients flowing through different layers in the net during training.
         Can be used for checking for possible gradient vanishing / exploding problems.
@@ -203,10 +216,10 @@ class AMPGCN(torch.nn.Module):
         plt.legend([Line2D([0], [0], color="c", lw=4),
                     Line2D([0], [0], color="b", lw=4),
                     Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
-        plt.savefig(os.path.join(gradient_flow_plot_save_path, "gradient_flow_ep{}_itr{}".format(epoch_idx, iter)), bbox_inches='tight', facecolor="white")
+        plt.savefig(os.path.join(gradient_flow_plot_save_path, "gradient_flow_ep{}".format(epoch_idx)), bbox_inches='tight', facecolor="white")
         plt.close()
     
-    def visualize_activations(self, save_path, data, epoch_idx, iter, color="C0"):
+    def visualize_activations(self, save_path, data, epoch_idx, color="C0"):
         activations = {}
         self.eval()
         with torch.no_grad():
@@ -223,7 +236,7 @@ class AMPGCN(torch.nn.Module):
             x = self.conv1(x, edge_index)
             activations["AMPConv Layer 1"] = x.view(-1).numpy()
             x = self.norm1(x)
-            activations["BatchNorm 1"] = x.view(-1).numpy()
+            activations["Layer Norm 1"] = x.view(-1).numpy()
             x = self.act1(x)
             activations["ReLU 1"] = x.view(-1).numpy()
             # x = self.drop1(x)
@@ -231,7 +244,7 @@ class AMPGCN(torch.nn.Module):
             x = self.conv2(x, edge_index)
             activations["AmpConv Layer 2"] = x.view(-1).numpy()
             x = self.norm2(x)
-            activations["BatchNorm 2"] = x.view(-1).numpy()
+            activations["Layer Norm 2"] = x.view(-1).numpy()
             x = self.act2(x)
             activations["ReLU 2"] = x.view(-1).numpy()
             # x = self.drop2(x)
@@ -239,7 +252,7 @@ class AMPGCN(torch.nn.Module):
             x = self.conv3(x, edge_index)
             activations["AmpConv Layer 3"] = x.view(-1).numpy()
             x = self.norm3(x)
-            activations["BatchNorm 3"] = x.view(-1).numpy()
+            activations["Layer Norm 3"] = x.view(-1).numpy()
             x = self.act3(x)
             activations["ReLU 3"] = x.view(-1).numpy()
 
@@ -269,7 +282,7 @@ class AMPGCN(torch.nn.Module):
             fig_index += 1
         fig.suptitle("Activation distribution", fontsize=16)
         fig.subplots_adjust(hspace=0.4, wspace=0.4)
-        plt.savefig(os.path.join(save_path, "act_distrib_ep{}_iter{}".format(epoch_idx, iter)))
+        plt.savefig(os.path.join(save_path, "act_distrib_ep{}".format(epoch_idx)))
         plt.clf()
         plt.close()
 
@@ -425,8 +438,10 @@ else:
 # batch size 1, walk length 500 => ~225 nodes
 # batch size 20, walk length 100 => ~750 nodes
 # batch size 10, walk length 100 => ~500 nodes
-loader = GraphSAINTRandomWalkSampler(all_data, batch_size=10, walk_length=100,
-                                     num_steps=10, sample_coverage=100)
+loader = GraphSAINTRandomWalkSampler(all_data, batch_size=1, walk_length=500,
+                                     num_steps=1, sample_coverage=100)
+# Sample one subgraph
+data = iter(loader).__next__().to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)  # 
 start_time = time.time()
@@ -435,47 +450,45 @@ train_acc_list = []
 test_loss_list = []
 test_acc_list = []
 
-epochs = 10
+epochs = 50
 for epoch in range(epochs):
+    model.train()
+    model.training = True
+    optimizer.zero_grad()
 
     total_loss = total_examples = 0
-    for idx, data_obj in enumerate(loader):
-        model.train()
-        optimizer.zero_grad()
-        data = data_obj.to(device)
+    out = model(data)
+    train_loss = F.nll_loss(out, data.y, reduction='none')
+    train_loss = (train_loss * data.node_norm)[data.train_mask].sum()
+    train_accuracy = accuracy(out[data.train_mask].argmax(dim=1).numpy(), 
+                                data.y[data.train_mask].detach().numpy())
+    
+    train_loss.backward()
+    if epoch % 4 == 0:
+        model.plot_grad_flow(GRADS_PATH, epoch)
+        model.visualize_gradients(GRADS_PATH, epoch)
+        model.visualize_activations(ACTIV_PATH, data, epoch)
+    optimizer.step()
+    total_loss += train_loss.item() * data.num_nodes
+    total_examples += data.num_nodes
 
-        # edge_weight = data.edge_norm * data.edge_weight
-        out = model(data)
-        train_loss = F.nll_loss(out, data.y, reduction='none')
-        train_loss = (train_loss * data.node_norm)[data.train_mask].sum()
-        train_accuracy = accuracy(out[data.train_mask].argmax(dim=1).numpy(), 
-                                    data.y[data.train_mask].detach().numpy())
-        
-        train_loss.backward()
-        if idx % 4 == 0:
-            model.plot_grad_flow(GRADS_PATH, epoch, idx)
-            model.visualize_gradients(GRADS_PATH, epoch, idx)
-            model.visualize_activations(ACTIV_PATH, data, epoch, idx)
-        optimizer.step()
-        total_loss += train_loss.item() * data.num_nodes
-        total_examples += data.num_nodes
+    ########
+    # Test #
+    ########
+    model.eval()
+    model.training = False
+    with torch.no_grad():
+        test_loss = F.nll_loss(out, data.y, reduction='none')
+        test_loss = (test_loss * data.node_norm)[data.test_mask].sum()
+        test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).numpy(),
+                                    data.y[data.test_mask].detach().numpy())
 
-        ########
-        # Test #
-        ########
-        model.eval()
-        with torch.no_grad():
-            test_loss = F.nll_loss(out, data.y, reduction='none')
-            test_loss = (test_loss * data.node_norm)[data.test_mask].sum()
-            test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).numpy(),
-                                        data.y[data.test_mask].detach().numpy())
-
-        print("Epoch {:05d} Partition {:05d} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} "
-                .format(epoch, idx, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))
-        train_loss_list.append(train_loss.item())
-        train_acc_list.append(train_accuracy)
-        test_loss_list.append(test_loss.item())
-        test_acc_list.append(test_accuracy)
+    print("Epoch {:05d} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} "
+            .format(epoch, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))
+    train_loss_list.append(train_loss.item())
+    train_acc_list.append(train_accuracy)
+    test_loss_list.append(test_loss.item())
+    test_acc_list.append(test_accuracy)
 
 
 print("Training took {} minutes.".format((time.time() - start_time) / 60.))

@@ -39,6 +39,7 @@ def plot_loss_curves(train_losses, val_losses, epoch_count, save_path):
     plt.rcParams.update({'font.size': 16})
     sns.lineplot(x='Epoch', y='Loss Value', hue='Loss Type', data=pd.melt(visual_df, ['Epoch'], value_name="Loss Value", var_name="Loss Type"))
     plt.title("GCN Loss Curves")
+    plt.yscale("log")
     filename = "train_val_loss_curves"
     plt.savefig(os.path.join(save_path, filename + '.png'), bbox_inches='tight', facecolor="white")
     plt.close()
