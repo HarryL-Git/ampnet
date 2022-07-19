@@ -1,10 +1,32 @@
 import torch
 import numpy as np
-# from sklearn.decomposition import PCA
 from umap import UMAP
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 
+def embed_features_old(x, feature_embed_dim, value_embed_dim):
+    pca = PCA(n_components=feature_embed_dim)
+    scaler = StandardScaler()
+
+    # Feature Embedding: Perform PCA on transpose of nodes x features matrix
+    # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
+    gene_embedding = torch.from_numpy(pca.fit_transform(x.numpy().transpose())) # gene_embedding: [1433, feat_emb_dim]
+    reshaped_data = torch.reshape(x, (x.shape[0] * x.shape[1], 1))  # reshaped_data: [1433 * num_nodes, 1]
+    genes_with_embedding = torch.cat([
+        gene_embedding.repeat(x.shape[0], 1),  # [1433 * num_nodes, feat_emb_dim]
+        reshaped_data.repeat(1, value_embed_dim)], dim=1)  # [1433 * num_nodes, value_emb_dim]
+    embedded_per_spot = torch.reshape(genes_with_embedding,
+                                      (x.shape[0],
+                                       x.shape[1] * (feature_embed_dim + value_embed_dim)))  # [num_nodes, 1433 * (feat+emb_dim)]
+    
+    # Z score embedding before passing on in network
+    normalized_embedded_per_spot = scaler.fit_transform(embedded_per_spot)
+    embedded_per_spot = torch.from_numpy(normalized_embedded_per_spot).float()
+    return embedded_per_spot
+
+
+"""
 def embed_features(x, feature_emb_dim=30, value_emb_dim=0, num_sampled_vectors=20):
     umap_fit = UMAP(n_neighbors=15, n_components=feature_emb_dim, min_dist=0.1, metric='euclidean')
     scaler = StandardScaler()
@@ -39,11 +61,12 @@ def embed_features(x, feature_emb_dim=30, value_emb_dim=0, num_sampled_vectors=2
     # Roll vectors back up so that PyG is able to handle arrays
     node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], num_sampled_vectors * emb_dim))  # [num_nodes, num_sampled_vectors * emb_dim]
     
+    
     # Z score embedding before passing on in network
-    normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled)
+    normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rolled_up)  # node_vectors_rerolled
     normalized_node_vectors_rolled_up = torch.from_numpy(normalized_node_vectors_rolled_up_np).float()
     return normalized_node_vectors_rolled_up
-
+"""
 
 """
 Untouched embed function

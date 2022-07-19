@@ -44,7 +44,7 @@ class AMPConv(torch_geometric.nn.MessagePassing):
 
         self.MABlock1 = MultiheadAttBlock(embed_dim=embed_dim, num_heads=num_heads)
         self.MABlock2 = MultiheadAttBlock(embed_dim=embed_dim, num_heads=num_heads)
-        self.MABlock3 = MultiheadAttBlock(embed_dim=embed_dim, num_heads=num_heads)
+        # self.MABlock3 = MultiheadAttBlock(embed_dim=embed_dim, num_heads=num_heads)
         
     def forward(self, x, edge_index):
         out = self.propagate(edge_index, x=x)
@@ -59,8 +59,8 @@ class AMPConv(torch_geometric.nn.MessagePassing):
 
         # Forward through Multihead attention blocks
         x_j_reshape = self.MABlock1(x_i_reshape, x_j_reshape)
-        x_j_reshape = self.MABlock1(x_i_reshape, x_j_reshape)
-        x_j_reshape = self.MABlock1(x_i_reshape, x_j_reshape)
+        x_j_reshape = self.MABlock2(x_i_reshape, x_j_reshape)
+        # x_j_reshape = self.MABlock3(x_i_reshape, x_j_reshape)
 
         output_reshape = torch.reshape(x_j_reshape, (x_i.shape[0], x_i.shape[1]))
 

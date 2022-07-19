@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-#
-# Intended as a simple benchmark of the AMPNetClassifier against the Cora data set
-#
-# @author Rahul Dhodapkar
-
 import os
 import math
 import time
@@ -14,15 +8,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.lines import Line2D
-from src.ampnet.utils.preprocess import embed_features
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv
-from src.ampnet.conv.amp_conv import AMPConv
+from src.ampnet.conv.amp_conv import AMPConv, AMPConvOneBlock
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
+from torch_geometric.utils.dropout import dropout_adj
 
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
@@ -69,29 +65,37 @@ def plot_acc_curves(train_accs, val_accs, epoch_count, save_path, model_name):
 
 
 class AMPGCN(torch.nn.Module):
-    def __init__(self, embedding_dim=768, num_sampled_vectors=20, average_pooling_flag=True):
+    def __init__(self, feature_embedding_dim=5, num_sampled_vectors=20, average_pooling_flag=True):
         super().__init__()
-        self.emb_dim = embedding_dim
-        self.num_sampled_vectors = num_sampled_vectors
+        self.feature_embedding_dim = feature_embedding_dim
+        self.val_embedding_dim = 1
+        self.emb_dim = self.feature_embedding_dim + self.val_embedding_dim
+
+        self.num_sampled_vectors = 1433  # num_sampled_vectors
         self.average_pooling_flag = average_pooling_flag
-        channels = 20 * 768 if average_pooling_flag else 21 * 768
+        self.training = True
+        channels = dataset.num_node_features * self.emb_dim  if average_pooling_flag \
+                    else (dataset.num_node_features + 1) * self.emb_dim
+
+        self.feature_embedding_table = nn.Embedding(num_embeddings=1433, embedding_dim=self.feature_embedding_dim)
+
         if not average_pooling_flag:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, self.emb_dim))
             self.initialize_weights()
 
-        self.conv1 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
+        self.conv1 = AMPConvOneBlock(embed_dim=self.emb_dim, num_heads=1)
         self.norm1 = nn.BatchNorm1d(channels)
         self.act1 = nn.ReLU()
         # self.drop1 = nn.Dropout(p=0.5)
 
-        self.conv2 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
+        self.conv2 = AMPConvOneBlock(embed_dim=self.emb_dim, num_heads=1)
         self.norm2 = nn.BatchNorm1d(channels)
         self.act2 = nn.ReLU()
         # self.drop2 = nn.Dropout(p=0.5)
 
-        self.conv3 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
-        self.norm3 = nn.BatchNorm1d(channels)
-        self.act3 = nn.ReLU()
+        # self.conv3 = AMPConv(embed_dim=self.emb_dim, num_heads=1)
+        # self.norm3 = nn.BatchNorm1d(channels)
+        # self.act3 = nn.ReLU()
 
         self.lin1 = nn.Linear(self.emb_dim, out_features=dataset.num_classes)
         # self.lin2 = nn.Linear(in_features=16, out_features=dataset.num_classes)
@@ -100,9 +104,46 @@ class AMPGCN(torch.nn.Module):
     def initialize_weights(self):
         nn.init.normal_(self.cls_token, std=.02)
 
+    def embed_features(self, x, feature_embed_dim, value_embed_dim):
+        pca = PCA(n_components=feature_embed_dim)
+        scaler = StandardScaler()
+
+        # Feature Embedding: Perform PCA on transpose of nodes x features matrix
+        # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
+        gene_embedding = torch.from_numpy(pca.fit_transform(x.numpy().transpose())) # gene_embedding: [1433, feat_emb_dim]
+        reshaped_data = torch.reshape(x, (x.shape[0] * x.shape[1], 1))  # reshaped_data: [1433 * num_nodes, 1]
+        genes_with_embedding = torch.cat([
+            gene_embedding.repeat(x.shape[0], 1),  # [1433 * num_nodes, feat_emb_dim]
+            reshaped_data.repeat(1, value_embed_dim)], dim=1)  # [1433 * num_nodes, value_emb_dim]
+        embedded_per_spot = torch.reshape(genes_with_embedding,
+                                        (x.shape[0],
+                                        x.shape[1] * (feature_embed_dim + value_embed_dim)))  # [num_nodes, 1433 * (feat+emb_dim)]
+        
+        # Z score embedding before passing on in network
+        normalized_embedded_per_spot = scaler.fit_transform(embedded_per_spot)
+        embedded_per_spot = torch.from_numpy(normalized_embedded_per_spot).float()
+        return embedded_per_spot
+
+    def embed_with_table_and_downsample_features(self, x):
+        # x shape: [num_nodes, 1433]. Sample 20 feature vectors per node where binary value != 0
+        sampled_node_vectors_unrolled = []
+        for node_idx in range(x.shape[0]):
+            # present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
+            feat_idxs = list(range(x.shape[1]))
+            # sampled_feature_idxs = np.random.choice(feat_idxs, size=self.num_sampled_vectors, replace=True)
+            sampled_vectors = self.feature_embedding_table.weight[feat_idxs]  # [num_sampled_vectors, emb_dim]
+            sampled_vectors = torch.cat((sampled_vectors, x[node_idx].unsqueeze(-1)), dim=1)
+            sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
+
+        sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
+        node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+        return node_vectors_rerolled
+
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x becomes [num_nodes, 1433]
-        x = embed_features(x, feature_emb_dim=self.emb_dim, value_emb_dim=0)  # x becomes [num_nodes, 1000]
+        # edge_index = dropout_adj(edge_index=edge_index, p=0.3, training=self.training)[0]
+        x = self.embed_features(x, feature_embed_dim=self.feature_embedding_dim, value_embed_dim=self.val_embedding_dim)
+        # x = self.embed_with_table_and_downsample_features(x)
         
         # Append class token
         if not self.average_pooling_flag:
@@ -121,9 +162,9 @@ class AMPGCN(torch.nn.Module):
         x = self.act2(x)
         # x = self.drop2(x)
 
-        x = self.conv3(x, edge_index)
-        x = self.norm3(x)
-        x = self.act3(x)
+        # x = self.conv3(x, edge_index)
+        # x = self.norm3(x)
+        # x = self.act3(x)
 
         # Reshape node features into unrolled list of feature vectors, perform average pooling
         x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
@@ -154,7 +195,7 @@ class AMPGCN(torch.nn.Module):
         fig, ax = plt.subplots(rows, columns, figsize=(columns*2.7, rows*2.5))
         fig_index = 0
         for key in grads:
-            key_ax = ax[fig_index%columns]
+            key_ax = ax[fig_index//columns][fig_index%columns]
             sns.histplot(data=grads[key], bins=30, ax=key_ax, color=color, kde=True)
             mean = grads[key].mean()
             median = grads[key].median()
@@ -211,7 +252,8 @@ class AMPGCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
-            x = embed_features(x, feature_emb_dim=self.emb_dim, value_emb_dim=0)
+            x = self.embed_features(x, feature_embed_dim=self.feature_embedding_dim, value_embed_dim=self.val_embedding_dim)
+            # x = self.embed_with_table_and_downsample_features(x)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
             if not self.average_pooling_flag:
@@ -236,12 +278,12 @@ class AMPGCN(torch.nn.Module):
             activations["ReLU 2"] = x.view(-1).numpy()
             # x = self.drop2(x)
 
-            x = self.conv3(x, edge_index)
-            activations["AmpConv Layer 3"] = x.view(-1).numpy()
-            x = self.norm3(x)
-            activations["BatchNorm 3"] = x.view(-1).numpy()
-            x = self.act3(x)
-            activations["ReLU 3"] = x.view(-1).numpy()
+            # x = self.conv3(x, edge_index)
+            # activations["AmpConv Layer 3"] = x.view(-1).numpy()
+            # x = self.norm3(x)
+            # activations["BatchNorm 3"] = x.view(-1).numpy()
+            # x = self.act3(x)
+            # activations["ReLU 3"] = x.view(-1).numpy()
 
             x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
             if self.average_pooling_flag:
@@ -283,10 +325,30 @@ class GCN(torch.nn.Module):
         self.act1 = nn.ReLU()
         self.drop1 = nn.Dropout(p=0.5)
         # self.norm1 = nn.BatchNorm1d(dataset.num_node_features * 5)
+    
+    def embed_features(x, feature_embed_dim, value_embed_dim):
+        pca = PCA(n_components=feature_embed_dim)
+        scaler = StandardScaler()
+
+        # Feature Embedding: Perform PCA on transpose of nodes x features matrix
+        # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
+        gene_embedding = torch.from_numpy(pca.fit_transform(x.numpy().transpose())) # gene_embedding: [1433, feat_emb_dim]
+        reshaped_data = torch.reshape(x, (x.shape[0] * x.shape[1], 1))  # reshaped_data: [1433 * num_nodes, 1]
+        genes_with_embedding = torch.cat([
+            gene_embedding.repeat(x.shape[0], 1),  # [1433 * num_nodes, feat_emb_dim]
+            reshaped_data.repeat(1, value_embed_dim)], dim=1)  # [1433 * num_nodes, value_emb_dim]
+        embedded_per_spot = torch.reshape(genes_with_embedding,
+                                        (x.shape[0],
+                                        x.shape[1] * (feature_embed_dim + value_embed_dim)))  # [num_nodes, 1433 * (feat+emb_dim)]
+        
+        # Z score embedding before passing on in network
+        normalized_embedded_per_spot = scaler.fit_transform(embedded_per_spot)
+        embedded_per_spot = torch.from_numpy(normalized_embedded_per_spot).float()
+        return embedded_per_spot
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
-        x = embed_features(x, feature_emb_dim=30, value_emb_dim=0)  # x becomes [2708, 20 * (feat_emb_dim + value_emb_dim + 1)]
+        x = self.embed_features(x, feature_embed_dim=30, value_embed_dim=0)
 
         # x = self.norm1(x)  # Added batch norm to try and help vanishing gradients
         x = self.conv1(x, edge_index)
@@ -368,7 +430,7 @@ class GCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
-            x = embed_features(x, feature_emb_dim=30, value_emb_dim=0)
+            x = self.embed_features(x, feature_emb_dim=30, value_emb_dim=0)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
             x = self.conv1(x, edge_index)
@@ -425,7 +487,7 @@ else:
 # batch size 1, walk length 500 => ~225 nodes
 # batch size 20, walk length 100 => ~750 nodes
 # batch size 10, walk length 100 => ~500 nodes
-loader = GraphSAINTRandomWalkSampler(all_data, batch_size=10, walk_length=100,
+loader = GraphSAINTRandomWalkSampler(all_data, batch_size=5, walk_length=100,
                                      num_steps=10, sample_coverage=100)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)  # 
@@ -491,4 +553,5 @@ with torch.no_grad():
     pred = model(all_data).argmax(dim=1)
     correct = (pred[all_data.test_mask] == all_data.y[all_data.test_mask]).sum()
     acc = int(correct) / int(all_data.test_mask.sum())
+
 print(f'Final Test Accuracy: {acc:.4f}')
