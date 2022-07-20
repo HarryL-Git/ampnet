@@ -283,7 +283,7 @@ train_acc_list = []
 test_loss_list = []
 test_acc_list = []
 
-epochs = 50
+epochs = 20
 for epoch in range(epochs):
     model.train()
     optimizer.zero_grad()

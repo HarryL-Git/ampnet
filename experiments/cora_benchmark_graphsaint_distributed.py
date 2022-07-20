@@ -41,7 +41,7 @@ def train(rank, size, backend='gloo'):
         if not os.path.exists(SAVE_PATH):
             os.mkdir(SAVE_PATH)
             os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-            os.system("cp ./cora_total_pooling.py {}/".format(SAVE_PATH))
+            os.system("cp ./cora_benchmark_graphsaint_distributed.py {}/".format(SAVE_PATH))
         if not os.path.exists(GRADS_PATH):
             os.mkdir(GRADS_PATH)
         if not os.path.exists(ACTIV_PATH):

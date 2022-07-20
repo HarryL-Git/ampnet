@@ -8,7 +8,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
-from torch_geometric.utils.dropout import dropout_adj
 from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 from src.ampnet.module.amp_gcn import AMPGCN
