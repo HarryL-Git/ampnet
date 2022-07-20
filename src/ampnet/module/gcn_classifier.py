@@ -17,9 +17,10 @@ from torch_geometric.datasets import Planetoid
 dataset = Planetoid(root='/tmp/Cora', name='Cora')
 
 class GCN(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, device="cpu"):
         super().__init__()
         print("Initializing GCN network...")
+        self.device = device
         self.emb_dim = 100
         self.num_sampled_vectors = 20
         channels = dataset.num_node_features * self.emb_dim
@@ -27,7 +28,7 @@ class GCN(torch.nn.Module):
 
         self.conv1 = GCNConv(channels, 16)
         # self.norm1 = nn.BatchNorm1d(channels)
-        self.drop1 = nn.Dropout(p=0.5)
+        self.drop1 = nn.Dropout(p=0.2)
         self.act1 = nn.ReLU()
         self.conv2 = GCNConv(16, dataset.num_classes)
 
@@ -43,7 +44,8 @@ class GCN(torch.nn.Module):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
         # edge_index = dropout_adj(edge_index=edge_index, p=0.5, training=self.training)[0]
         # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [2708, 8598]
-        x = self.sample_feats_and_mask(x)
+        x = self.sample_feats_and_mask(x.to("cpu"))
+        x = x.to(self.device)
 
         x = self.conv1(x, edge_index)
         # x = self.norm1(x)
@@ -60,7 +62,7 @@ class GCN(torch.nn.Module):
         scaler = StandardScaler()
 
         # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
-        feature_embedding = torch.from_numpy(pca.fit_transform(x.numpy().transpose())) # feat embedding: [1433, feat_emb_dim]
+        feature_embedding = torch.from_numpy(pca.fit_transform(x.numpy().transpose()))  # feat embedding: [1433, feat_emb_dim]
         reshaped_data = torch.reshape(x, (x.shape[0] * x.shape[1], 1))  # reshaped_data: [1433 * num_nodes, 1]
 
         # Repeat and concatenate
@@ -104,7 +106,7 @@ class GCN(torch.nn.Module):
         Visualization code partly taken from the notebook tutorial at
         https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial3/Activation_Functions.html
         """
-        grads = {name: params.grad.data.view(-1) for name, params in list(self.named_parameters()) if "weight" in name and params.grad is not None}  # Only seeing gradients for leaf nodes, non-leaves grad is None
+        grads = {name: params.grad.data.view(-1).cpu() for name, params in list(self.named_parameters()) if "weight" in name and params.grad is not None}  # Only seeing gradients for leaf nodes, non-leaves grad is None
 
         gradient_distrib_save_path = os.path.join(save_path, "gradient_distrib_plots")
         if not os.path.exists(gradient_distrib_save_path):
@@ -142,14 +144,14 @@ class GCN(torch.nn.Module):
             os.mkdir(gradient_flow_plot_save_path)
 
         ave_grads = []
-        max_grads= []
+        max_grads = []
         layers = []
         for n, p in self.named_parameters():
             # if (p.requires_grad) and ("bias" not in n):
             if "weight" in n and p.grad is not None:
                 layers.append(n)
-                ave_grads.append(p.grad.abs().mean())
-                max_grads.append(p.grad.abs().max())
+                ave_grads.append(p.grad.abs().mean().cpu())
+                max_grads.append(p.grad.abs().max().cpu())
         plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
         plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
         plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="k" )
@@ -172,18 +174,19 @@ class GCN(torch.nn.Module):
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
             # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)
-            x = self.sample_feats_and_mask(x)
-            activations["Embedded Feats"] = x.view(-1).numpy()
+            x = self.sample_feats_and_mask(x.to("cpu"))
+            x = x.to(self.device)
+            activations["Embedded Feats"] = x.view(-1).cpu().numpy()
 
             x = self.conv1(x, edge_index)
-            activations["GCN Layer 1"] = x.view(-1).numpy()
+            activations["GCN Layer 1"] = x.view(-1).cpu().numpy()
             # x = self.norm1(x)
             # activations["Norm Layer 1"] = x.view(-1).numpy()
             x = self.drop1(x)
             x = self.act1(x)
-            activations["ReLU 1"] = x.view(-1).numpy()
+            activations["ReLU 1"] = x.view(-1).cpu().numpy()
             x = self.conv2(x, edge_index)
-            activations["GCN Layer 2"] = x.view(-1).numpy()
+            activations["GCN Layer 2"] = x.view(-1).cpu().numpy()
 
         ## Plotting
         columns = 2
