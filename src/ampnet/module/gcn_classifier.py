@@ -22,53 +22,39 @@ class GCN(torch.nn.Module):
         print("Initializing GCN network...")
         self.emb_dim = 100
         self.num_sampled_vectors = 20
-        channels = self.num_sampled_vectors * self.emb_dim
-
-        self.conv1 = GCNConv(channels, channels)
-        self.norm1 = nn.BatchNorm1d(channels)
-        self.drop1 = nn.Dropout(p=0.5)
-        self.act1 = nn.LeakyReLU(negative_slope=0.01)
-        self.conv2 = GCNConv(channels, channels)
-
-        self.lin1 = nn.Linear(in_features=dataset.num_node_features * self.emb_dim, out_features=dataset.num_classes)
-
+        channels = dataset.num_node_features * self.emb_dim
         self.mask_token = nn.Parameter(torch.zeros(1, self.emb_dim))
+
+        self.conv1 = GCNConv(channels, 16)
+        # self.norm1 = nn.BatchNorm1d(channels)
+        self.drop1 = nn.Dropout(p=0.5)
+        self.act1 = nn.ReLU()
+        self.conv2 = GCNConv(16, dataset.num_classes)
+
+        # self.lin1 = nn.Linear(in_features=dataset.num_node_features * self.emb_dim, out_features=dataset.num_classes)
+    
+        self.initialize_weights()
+    
+    def initialize_weights(self):
+        # nn.init.normal_(self.cls_token, std=.02)
+        nn.init.normal_(self.mask_token, std=.02)
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
-        edge_index = dropout_adj(edge_index=edge_index, p=0.5, training=self.training)[0]
+        # edge_index = dropout_adj(edge_index=edge_index, p=0.5, training=self.training)[0]
         # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [2708, 8598]
-        x, sampled_indices = self.embed_features_downsample(x)
+        x = self.sample_feats_and_mask(x)
 
         x = self.conv1(x, edge_index)
-        x = self.norm1(x)
+        # x = self.norm1(x)
         x = self.drop1(x)
         x = self.act1(x)
         x = self.conv2(x, edge_index)
 
-        # Reshape, add in mask tokens to get back total feature vector size flattened
-        x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 20, emb_dim]
-        x_ = []
-        for node_idx in range(x.shape[0]):
-            mask_tokens = self.mask_token.repeat(dataset.num_node_features - self.num_sampled_vectors, 1)
-            concat_vectors = torch.cat([x[node_idx], mask_tokens], dim=0)
-
-            all_indices = np.array(list(range(dataset.num_node_features)))
-            unsampled_indices = np.delete(all_indices, sampled_indices[node_idx])
-            concat_indices = np.concatenate([sampled_indices[node_idx], unsampled_indices], axis=0)
-            concat_indices_argsorted = np.argsort(concat_indices)
-            concat_indices_t = torch.LongTensor(concat_indices_argsorted)
-
-            node_x_ = torch.gather(input=concat_vectors, dim=0, index=concat_indices_t.unsqueeze(-1).repeat(1, self.emb_dim))
-            x_.append(node_x_.unsqueeze(0))
-        
-        x_ = torch.cat(x_)
-        x_ = torch.reshape(x_, (x_.shape[0], x_.shape[1] * self.emb_dim))
-
-        x_ = self.lin1(x_)
-        return F.log_softmax(x_, dim=1)
+        # x = self.lin1(x)
+        return F.log_softmax(x, dim=1)
     
-    def embed_features_downsample(self, x, feature_emb_dim=99, value_emb_dim=1):
+    def sample_feats_and_mask(self, x, feature_emb_dim=99, value_emb_dim=1):
         assert self.emb_dim == feature_emb_dim + value_emb_dim, "feat and val emb dim must match self.emb_dim"
         pca = PCA(n_components=feature_emb_dim)
         scaler = StandardScaler()
@@ -89,9 +75,7 @@ class GCN(torch.nn.Module):
         # First reshape into list of vectors per node
         node_vectors_unrolled = torch.reshape(node_vectors_rolled_up, (node_vectors_rolled_up.shape[0], int(node_vectors_rolled_up.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
 
-        # Sample 20 feature vectors per node where binary value != 0
-        sampled_node_vectors_unrolled = []
-        sampled_indices = []
+        # Sample 20 feature vectors, skewing to balance 1s and 0s. Mask out all unsampled vectors with mask tokens
         for node_idx in range(x.shape[0]):
             present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
             unpresent_indices_len = dataset.num_node_features - len(present_feat_idxs)
@@ -100,21 +84,20 @@ class GCN(torch.nn.Module):
 
             feat_indices = list(range(dataset.num_node_features))
             sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False, p=sampling_probs)
-            sampled_vectors = node_vectors_unrolled[node_idx, sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
 
-            sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
-            sampled_indices.append(np.expand_dims(sampled_feature_idxs, axis=0))
-        sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
-        sampled_indices = np.concatenate(sampled_indices)
+            # Mask out all unsampled feature vectors with mask token
+            for feat_idx in range(node_vectors_unrolled.shape[1]):
+                if feat_idx not in sampled_feature_idxs:
+                    node_vectors_unrolled[node_idx, feat_idx] = self.mask_token
 
         # Roll vectors back up so that PyG is able to handle arrays
-        node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], self.num_sampled_vectors * self.emb_dim))  # [num_nodes, num_sampled_vectors * emb_dim]
+        node_vectors_rerolled = torch.reshape(node_vectors_unrolled, (x.shape[0], node_vectors_unrolled.shape[1] * self.emb_dim))  # [num_nodes, num_feats * emb_dim]
         
         # Z score embedding before passing on in network
-        normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled)  # node_vectors_rerolled
-        normalized_node_vectors_rolled_up = torch.from_numpy(normalized_node_vectors_rolled_up_np).float()
+        normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled.detach().numpy())
+        normalized_node_vectors_rolled_up = torch.tensor(normalized_node_vectors_rolled_up_np, requires_grad=True).float()  # torch.from_numpy(normalized_node_vectors_rolled_up_np).float()
         
-        return normalized_node_vectors_rolled_up, sampled_indices
+        return normalized_node_vectors_rolled_up
 
     def visualize_gradients(self, save_path, epoch_idx, iter, color="C0"):
         """
@@ -189,40 +172,18 @@ class GCN(torch.nn.Module):
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
             # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)
-            x, sampled_indices = self.embed_features_downsample(x)
+            x = self.sample_feats_and_mask(x)
             activations["Embedded Feats"] = x.view(-1).numpy()
 
             x = self.conv1(x, edge_index)
             activations["GCN Layer 1"] = x.view(-1).numpy()
-            x = self.norm1(x)
-            activations["Norm Layer 1"] = x.view(-1).numpy()
+            # x = self.norm1(x)
+            # activations["Norm Layer 1"] = x.view(-1).numpy()
             x = self.drop1(x)
             x = self.act1(x)
-            activations["LeakyReLU 1"] = x.view(-1).numpy()
+            activations["ReLU 1"] = x.view(-1).numpy()
             x = self.conv2(x, edge_index)
             activations["GCN Layer 2"] = x.view(-1).numpy()
-
-            # Reshape, add in mask tokens to get back total feature vector size flattened
-            x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 20, emb_dim]
-            x_ = []
-            for node_idx in range(x.shape[0]):
-                mask_tokens = self.mask_token.repeat(dataset.num_node_features - self.num_sampled_vectors, 1)
-                concat_vectors = torch.cat([x[node_idx], mask_tokens], dim=0)
-
-                all_indices = np.array(list(range(dataset.num_node_features)))
-                unsampled_indices = np.delete(all_indices, sampled_indices[node_idx])
-                concat_indices = np.concatenate([sampled_indices[node_idx], unsampled_indices], axis=0)
-                concat_indices_argsorted = np.argsort(concat_indices)
-                concat_indices_t = torch.LongTensor(concat_indices_argsorted)
-
-                node_x_ = torch.gather(input=concat_vectors, dim=0, index=concat_indices_t.unsqueeze(-1).repeat(1, self.emb_dim))
-                x_.append(node_x_.unsqueeze(0))
-            
-            x_ = torch.cat(x_)
-            x_ = torch.reshape(x_, (x_.shape[0], x_.shape[1] * self.emb_dim))
-
-            x_ = self.lin1(x_)
-            activations["Final Linear Layer"] = x.view(-1).numpy()
 
         ## Plotting
         columns = 2

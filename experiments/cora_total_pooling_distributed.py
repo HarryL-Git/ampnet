@@ -4,25 +4,12 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 import os
-import math
 import time
 import datetime
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib.lines import Line2D
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
-import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
-from torch_geometric.nn import GCNConv, GATConv, SAGEConv
-from src.ampnet.conv.amp_conv import AMPConv, AMPConvOneBlock
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
-from torch_geometric.utils.dropout import dropout_adj
 from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 from src.ampnet.module.amp_gcn import AMPGCN
@@ -31,7 +18,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 # Global Variables
-TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
+TRAIN_AMPCONV = False  # If False, trains a simple 2-layer GCN
 
 
 def train(rank, size, fn, backend='gloo'):
@@ -96,7 +83,7 @@ def train(rank, size, fn, backend='gloo'):
                                         data.y[data.train_mask].detach().numpy())
             
             train_loss.backward()
-            if idx % 4 == 0 and rank == 0:
+            if rank == 0 and idx % 4 == 0:
                 model.plot_grad_flow(GRADS_PATH, epoch, idx)
                 model.visualize_gradients(GRADS_PATH, epoch, idx)
                 model.visualize_activations(ACTIV_PATH, data, epoch, idx)
@@ -113,12 +100,21 @@ def train(rank, size, fn, backend='gloo'):
                 test_loss = (test_loss * data.node_norm)[data.test_mask].sum()
                 test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).numpy(),
                                             data.y[data.test_mask].detach().numpy())
-
-            print("Epoch {:05d} Partition {:05d} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} ".format(epoch, idx, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))
-            train_loss_list.append(train_loss.item())
-            train_acc_list.append(train_accuracy)
-            test_loss_list.append(test_loss.item())
-            test_acc_list.append(test_accuracy)
+            if rank == 0:
+                print("Epoch {:05d} Partition {:05d} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} ".format(epoch, idx, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))
+                train_loss_list.append(train_loss.item())
+                train_acc_list.append(train_accuracy)
+                test_loss_list.append(test_loss.item())
+                test_acc_list.append(test_accuracy)
+    
+    if rank == 0:
+        print("Training took {} minutes.".format((time.time() - start_time) / 60.))
+        if TRAIN_AMPCONV:
+            plot_loss_curves(train_loss_list, test_loss_list, epoch_count=len(train_loss_list), save_path=SAVE_PATH, model_name="AMPConv")
+            plot_acc_curves(train_acc_list, test_acc_list, epoch_count=len(train_acc_list), save_path=SAVE_PATH, model_name="AMPConv")
+        else:
+            plot_loss_curves(train_loss_list, test_loss_list, epoch_count=len(train_loss_list), save_path=SAVE_PATH, model_name="GCN")
+            plot_acc_curves(train_acc_list, test_acc_list, epoch_count=len(train_acc_list), save_path=SAVE_PATH, model_name="GCN")
 
     cleanup()
 
