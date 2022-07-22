@@ -18,7 +18,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
 
 # Global Variables
-TRAIN_AMPCONV = False  # If False, trains a simple 2-layer GCN
+TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
 
 
 def train(rank, size, backend='gloo'):

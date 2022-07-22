@@ -12,48 +12,73 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
-from src.ampnet.conv.amp_conv import AMPConv, AMPConvOneBlock
+from src.ampnet.conv.amp_conv import AMPConv
 from src.ampnet.utils.utils import *
 
 
 dataset = Planetoid(root='/tmp/Cora', name='Cora')
 
 class AMPGCN(torch.nn.Module):
-    def __init__(self, embedding_dim=100, downsampling_vectors=True):  # average_pooling_flag=True
+    def __init__(self, embedding_dim=100, num_heads=2, downsampling_vectors=True, average_pooling_flag=True):
         super().__init__()
+
+        self.conv1_embedding = None
+        self.conv2_embedding = None
         self.emb_dim = embedding_dim
         self.num_sampled_vectors = 20
         self.downsampling_vectors = downsampling_vectors
-        channels = self.num_sampled_vectors * self.emb_dim if downsampling_vectors else dataset.num_node_features * self.emb_dim
-        # self.average_pooling_flag = average_pooling_flag
+        self.average_pooling_flag = average_pooling_flag
 
-        # self.feature_embedding_table = nn.Embedding(num_embeddings=dataset.num_node_features, embedding_dim=embedding_dim - 1)
-        # if not average_pooling_flag:
-        #     self.cls_token = nn.Parameter(torch.zeros(1, 1, self.emb_dim))
-        #     self.initialize_weights()
+        num_flattened_features = self.num_sampled_vectors * self.emb_dim if downsampling_vectors else dataset.num_node_features * self.emb_dim
 
-        self.conv1 = AMPConvOneBlock(embed_dim=embedding_dim, num_heads=2)
-        self.conv2 = AMPConvOneBlock(embed_dim=embedding_dim, num_heads=2)
+        # self.feature_embedding_table = nn.Embedding(
+        #     num_embeddings=dataset.num_node_features,
+        #     embedding_dim=embedding_dim - 1
+        # )
+        # self.mask_token = nn.Parameter(torch.zeros(1, embedding_dim))
 
-        self.norm1 = nn.BatchNorm1d(channels)
-        self.norm2 = nn.BatchNorm1d(channels)
-        self.act1 = nn.ReLU()
-        self.lin1 = nn.Linear(in_features=dataset.num_node_features * self.emb_dim, out_features=dataset.num_classes)
+        if not average_pooling_flag:
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, self.emb_dim))
+            nn.init.normal_(self.cls_token, std=.02)
 
-        self.mask_token = nn.Parameter(torch.zeros(1, embedding_dim))
+        self.layer_norm1 = nn.LayerNorm(
+            num_flattened_features,
+            elementwise_affine=False
+        )
 
-        # self.drop1 = nn.Dropout(p=0.5)
-        # self.act2 = nn.ReLU()
-        # self.drop2 = nn.Dropout(p=0.5)
-        # self.lin2 = nn.Linear(in_features=16, out_features=dataset.num_classes)
+        self.layer_norm2 = nn.LayerNorm(
+            num_flattened_features,
+            elementwise_affine=False
+        )
 
-        self.initialize_weights()
-    
-    def initialize_weights(self):
-        # nn.init.normal_(self.cls_token, std=.02)
-        nn.init.normal_(self.mask_token, std=.02)
+        self.conv1 = AMPConv(
+            embed_dim=embedding_dim,
+            num_heads=num_heads
+        )
+        self.post_conv_linear1 = nn.Linear(
+            in_features=num_flattened_features,
+            out_features=num_flattened_features
+        )
 
-    def embed_features(self, x, feature_embed_dim, value_embed_dim):
+        self.conv2 = AMPConv(
+            embed_dim=embedding_dim,
+            num_heads=num_heads
+        )
+        self.post_conv_linear2 = nn.Linear(
+            in_features=num_flattened_features,
+            out_features=num_flattened_features
+        )
+
+        self.linear_out = nn.Linear(
+            in_features=embedding_dim,
+            out_features=dataset.num_classes
+        )
+
+        self.drop1 = nn.Dropout(p=0.5)
+        self.drop2 = nn.Dropout(p=0.5)
+        self.drop3 = nn.Dropout(p=0.5)
+
+    def PCA_embed_features(self, x, feature_embed_dim, value_embed_dim):
         pca = PCA(n_components=feature_embed_dim)
         scaler = StandardScaler()
 
@@ -137,10 +162,30 @@ class AMPGCN(torch.nn.Module):
         return normalized_node_vectors_rolled_up, sampled_indices
 
     def forward(self, data):
-        x, edge_index = data.x, data.edge_index  # x becomes [num_nodes, 1433]
-        # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [num_nodes, 8598]
-        x, sampled_indices = self.embed_features_downsample(x)  # x becomes [num_nodes, num_feats * emb_dim], sampled_indices are [num_nodes, 20]
-        # x = self.embed_with_table(x, num_sampled_vectors=dataset.num_node_features)
+        x, edge_index = data.x, data.edge_index  # x: [num_nodes, 1433]
+
+        x, sampled_indices = self.embed_features_downsample(x)
+        # x becomes [num_nodes, num_feats * emb_dim], sampled_indices are [num_nodes, 20]
+
+        x = self.drop1(x)
+        x = self.conv1(x, edge_index)
+        self.conv1_embedding = x
+        x = F.elu(x)
+        x = self.drop2(x)
+        x = self.conv2(x, edge_index)
+        self.conv2_embedding = x
+        x = F.elu(x)
+        x = self.drop3(x)
+
+        # Reshape node features into unrolled list of feature vectors, perform average pooling
+        x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
+        if self.average_pooling_flag:
+            x = x.mean(dim=1)  # Average pooling
+        else:
+            x = x[:, 0]
+
+        x = self.linear_out(x)
+        return F.log_softmax(x, dim=1)
 
         # # Append class token
         # if not self.average_pooling_flag:
