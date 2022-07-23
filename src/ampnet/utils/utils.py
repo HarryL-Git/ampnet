@@ -20,9 +20,16 @@ def plot_loss_curves(train_losses, val_losses, epoch_count, save_path, model_nam
     plt.rcParams.update({'font.size': 16})
     sns.lineplot(x='Iteration', y='Loss Value', hue='Loss Type', data=pd.melt(visual_df, ['Iteration'], value_name="Loss Value", var_name="Loss Type"))
     plt.title("{} Loss Curves".format(model_name))
-    plt.yscale("log")
     filename = "train_val_loss_curves"
     plt.savefig(os.path.join(save_path, filename + '.png'), bbox_inches='tight', facecolor="white")
+    plt.close()
+
+    plt.rcParams.update({'font.size': 16})
+    sns.lineplot(x='Iteration', y='Loss Value', hue='Loss Type', data=pd.melt(visual_df, ['Iteration'], value_name="Loss Value", var_name="Loss Type"))
+    plt.title("{} Loss Curves (Log 10 Scale)".format(model_name))
+    plt.yscale("log")
+    filename = "train_val_loss_curves_logscale"
+    plt.savefig(os.path.join(save_path, filename + '_log.png'), bbox_inches='tight', facecolor="white")
     plt.close()
 
 

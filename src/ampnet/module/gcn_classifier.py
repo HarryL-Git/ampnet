@@ -22,7 +22,7 @@ class GCN(torch.nn.Module):
         print("Initializing GCN network...")
         self.device = device
         self.emb_dim = 100
-        self.num_sampled_vectors = 40
+        self.num_sampled_vectors = 400
         channels = dataset.num_node_features * self.emb_dim
         self.mask_token = nn.Parameter(torch.zeros(1, self.emb_dim))
 
