@@ -32,10 +32,17 @@ if not os.path.exists(SAVE_PATH):
     os.mkdir(SAVE_PATH)
     os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))  # Empty details file
     os.system("cp ./experiments/cora_benchmark_graphsaint.py {}/".format(SAVE_PATH))
+    if TRAIN_AMPCONV:
+        os.system("cp ./src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
+        os.system("cp ./src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
+    else:
+        os.system("cp ./src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
+
 if not os.path.exists(GRADS_PATH):
     os.mkdir(GRADS_PATH)
 if not os.path.exists(ACTIV_PATH):
     os.mkdir(ACTIV_PATH)
+
 
 if TRAIN_AMPCONV:
     model = AMPGCN().to(device)
@@ -65,8 +72,8 @@ for epoch in range(epochs):
 
         # edge_weight = data.edge_norm * data.edge_weight
         out = model(data)
-        train_loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask])  # , reduction='none'
-        # train_loss = (train_loss * data.node_norm)[data.train_mask].sum()
+        train_loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask], reduction='none')
+        train_loss = (train_loss * data.node_norm)[data.train_mask].sum()
         train_accuracy = accuracy(out[data.train_mask].argmax(dim=1).numpy(), 
                                     data.y[data.train_mask].detach().numpy())
         
@@ -84,8 +91,8 @@ for epoch in range(epochs):
         ########
         model.eval()
         with torch.no_grad():
-            test_loss = F.nll_loss(out[data.test_mask], data.y[data.test_mask])  # , reduction='none'
-            # test_loss = (test_loss * data.node_norm)[data.test_mask].sum()
+            test_loss = F.nll_loss(out[data.test_mask], data.y[data.test_mask], reduction='none')
+            test_loss = (test_loss * data.node_norm)[data.test_mask].sum()
             test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).numpy(),
                                         data.y[data.test_mask].detach().numpy())
 

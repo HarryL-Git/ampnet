@@ -42,6 +42,11 @@ def train(rank, size, backend='gloo'):
             os.mkdir(SAVE_PATH)
             os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
             os.system("cp ./cora_benchmark_graphsaint_distributed.py {}/".format(SAVE_PATH))
+            if TRAIN_AMPCONV:
+                os.system("cp ./src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
+                os.system("cp ./src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
+            else:
+                os.system("cp ./src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
         if not os.path.exists(GRADS_PATH):
             os.mkdir(GRADS_PATH)
         if not os.path.exists(ACTIV_PATH):

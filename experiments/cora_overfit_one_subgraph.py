@@ -20,6 +20,11 @@ from torch_geometric.loader import GraphSAINTRandomWalkSampler
 from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 
+"""
+This script is out of date, and needs to be refactored before running again.
+"""
+
+
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
 SAVE_PATH = "./experiments/runs_overfit_one_subgraph"
