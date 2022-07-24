@@ -1,4 +1,5 @@
 import random
+import torch
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -43,7 +44,7 @@ def create_data(num_samples: int, noise_std: float=0.1, same_class_link_prob: fl
 
     # Create node features
     x = np.array([[0,0], [0,1], [1,0], [1,1]])
-    y = np.array([0,1,1,0])
+    y = np.array([0.,1.,1.,0.])
     x = np.repeat(x, [repeats, repeats, repeats, repeats], axis=0)
     y = np.repeat(y, [repeats, repeats, repeats, repeats], axis=0)
 
@@ -75,7 +76,7 @@ def create_data(num_samples: int, noise_std: float=0.1, same_class_link_prob: fl
                 dest_idx_list.append(col)
     
     edge_idx_arr = np.array([source_idx_list, dest_idx_list])
-    return x, y, adj_matrix, edge_idx_arr
+    return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32), torch.from_numpy(adj_matrix), torch.LongTensor(edge_idx_arr)
 
 
 def plot_node_features(node_features, labels):
@@ -89,7 +90,7 @@ def plot_node_features(node_features, labels):
 
 
 def plot_graph(adj_matrix, labels):
-    G = nx.from_numpy_matrix(A=adj_matrix, create_using=nx.DiGraph)  # DiGraph = directed graph
+    G = nx.from_numpy_matrix(A=adj_matrix.numpy(), create_using=nx.DiGraph)  # DiGraph = directed graph
     green_edges = []  # Edges between nodes of same class
     red_edges = []  # Edges between nodes of different class
     for edge in G.edges():
@@ -109,7 +110,7 @@ def plot_graph(adj_matrix, labels):
 
 if __name__ == "__main__":
     # For debugging purposes
-    x, y, adj_matrix, edge_idx_arr = create_data(num_samples=20)
+    x, y, adj_matrix, edge_idx_arr = create_data(num_samples=20, noise_std=0.05, same_class_link_prob=0.7, diff_class_link_prob=0.1)
     print("Node features:\n", x, "\n")
     print("Labels:\n", y, "\n")
     print("Adjacency Matrix:\n", adj_matrix, "\n")
