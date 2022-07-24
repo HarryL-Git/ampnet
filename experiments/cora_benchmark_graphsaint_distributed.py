@@ -15,18 +15,18 @@ from src.ampnet.module.amp_gcn import AMPGCN
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "6,7"
 
 # Global Variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
 
 
-def train(rank, size, backend='gloo'):
+def train(rank, size, backend='nccl'):
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '9001'
     dist.init_process_group(backend, rank=rank, world_size=size)
 
-    device = torch.device('cpu')
+    device = torch.device('cuda:{}'.format(rank))
     dataset = Planetoid(root='/tmp/Cora', name='Cora')
     all_data = dataset[0]
 
@@ -52,14 +52,15 @@ def train(rank, size, backend='gloo'):
         if not os.path.exists(ACTIV_PATH):
             os.mkdir(ACTIV_PATH)
 
+    torch.cuda.set_device(rank)
     if TRAIN_AMPCONV:
-        model = AMPGCN().to(device)
+        model = AMPGCN(device=device).cuda(rank)
     else:
-        model = GCN(device=device).to(device)
+        model = GCN(device=device).cuda(rank)
     # model.to(rank)  # For GPU training
 
     ddp_model = DDP(model)
-    loader = GraphSAINTRandomWalkSampler(all_data, batch_size=10, walk_length=150,
+    loader = GraphSAINTRandomWalkSampler(all_data, batch_size=20, walk_length=200,
                                          num_steps=10, sample_coverage=100)
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001, weight_decay=5e-4)
 
@@ -75,7 +76,7 @@ def train(rank, size, backend='gloo'):
         for idx, data_obj in enumerate(loader):
             model.train()
             optimizer.zero_grad()
-            data = data_obj.to(device)
+            data = data_obj.cuda()
 
             # edge_weight = data.edge_norm * data.edge_weight
             out = model(data)
@@ -85,10 +86,10 @@ def train(rank, size, backend='gloo'):
                                       data.y[data.train_mask].detach().cpu().numpy())
             
             train_loss.backward()
-            if rank == 0 and idx % 4 == 0:
-                model.plot_grad_flow(GRADS_PATH, epoch, idx)
-                model.visualize_gradients(GRADS_PATH, epoch, idx)
-                model.visualize_activations(ACTIV_PATH, data, epoch, idx)
+            # if rank == 0 and idx % 4 == 0:
+            #     model.plot_grad_flow(GRADS_PATH, epoch, idx)
+            #     model.visualize_gradients(GRADS_PATH, epoch, idx)
+            #     model.visualize_activations(ACTIV_PATH, data, epoch, idx)
             optimizer.step()
             total_loss += train_loss.item() * data.num_nodes
             total_examples += data.num_nodes
@@ -126,13 +127,13 @@ def cleanup():
 
 
 if __name__ == "__main__":
-    size = 4
+    size = 2
     processes = []
     mp.set_start_method("spawn")
     start_time = time.time()
 
     for rank in range(size):
-        p = mp.Process(target=train, args=(rank, size, 'gloo'))
+        p = mp.Process(target=train, args=(rank, size, 'nccl'))
         p.start()
         processes.append(p)
 

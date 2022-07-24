@@ -12,16 +12,18 @@ from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 from src.ampnet.module.amp_gcn import AMPGCN
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 # Global variables
-TRAIN_AMPCONV = False  # If False, trains a simple 2-layer GCN
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:6')
 dataset = Planetoid(root='/tmp/Cora', name='Cora')
-all_data = dataset[0].to(device)
+all_data = dataset[0]
 
 
 # Create save paths
-save_path = "./experiments/runs" if TRAIN_AMPCONV else "./experiments/runs_GCN_baseline"
+save_path = "./runs" if TRAIN_AMPCONV else "./runs_GCN_baseline"
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
@@ -31,12 +33,12 @@ ACTIV_PATH = os.path.join(SAVE_PATH, "activations")
 if not os.path.exists(SAVE_PATH):
     os.mkdir(SAVE_PATH)
     os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))  # Empty details file
-    os.system("cp ./experiments/cora_benchmark_graphsaint.py {}/".format(SAVE_PATH))
-    if TRAIN_AMPCONV:
-        os.system("cp ./src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
-        os.system("cp ./src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
-    else:
-        os.system("cp ./src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
+    # os.system("cp ./experiments/cora_benchmark_graphsaint.py {}/".format(SAVE_PATH))
+    # if TRAIN_AMPCONV:
+    #     os.system("cp ./src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
+    #     os.system("cp ./src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
+    # else:
+    #     os.system("cp ./src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
 
 if not os.path.exists(GRADS_PATH):
     os.mkdir(GRADS_PATH)
@@ -45,7 +47,7 @@ if not os.path.exists(ACTIV_PATH):
 
 
 if TRAIN_AMPCONV:
-    model = AMPGCN().to(device)
+    model = AMPGCN(device=device).to(device)
 else:
     model = GCN().to(device)
 
