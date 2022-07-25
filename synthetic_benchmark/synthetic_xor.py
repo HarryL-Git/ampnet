@@ -1,3 +1,4 @@
+import os
 import random
 import torch
 import numpy as np
@@ -79,13 +80,16 @@ def create_data(num_samples: int, noise_std: float=0.1, same_class_link_prob: fl
     return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32), torch.from_numpy(adj_matrix), torch.LongTensor(edge_idx_arr)
 
 
-def plot_node_features(node_features, labels):
+def plot_node_features(node_features, labels, save_path=None, save_name=None):
     scatter = plt.scatter(x=node_features[:,0], y=node_features[:,1], c=labels, cmap="winter")
     plt.title("Fuzzy XOR Node Features")
     plt.xlabel("Feature 1")
     plt.ylabel("Feature 2")
     plt.legend(handles=scatter.legend_elements()[0], labels=[0, 1], loc='center')
-    plt.show()
+    if save_path is None:
+        plt.show()
+    else:
+        plt.savefig(os.path.join(save_path, save_name), facecolor="white", bbox_inches="tight")
     plt.close()
 
 

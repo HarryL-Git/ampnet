@@ -12,12 +12,12 @@ from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 from src.ampnet.module.amp_gcn import AMPGCN
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cuda:6')
+device = torch.device('cpu')
 dataset = Planetoid(root='/tmp/Cora', name='Cora')
 all_data = dataset[0]
 
@@ -74,16 +74,16 @@ for epoch in range(epochs):
 
         # edge_weight = data.edge_norm * data.edge_weight
         out = model(data)
-        train_loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask], reduction='none')
+        train_loss = F.nll_loss(out, data.y, reduction='none')
         train_loss = (train_loss * data.node_norm)[data.train_mask].sum()
-        train_accuracy = accuracy(out[data.train_mask].argmax(dim=1).numpy(), 
-                                    data.y[data.train_mask].detach().numpy())
+        train_accuracy = accuracy(out[data.train_mask].argmax(dim=1).cpu().numpy(),
+                                    data.y[data.train_mask].detach().cpu().numpy())
         
         train_loss.backward()
-        if idx % 4 == 0:
-            model.plot_grad_flow(GRADS_PATH, epoch, idx)
-            model.visualize_gradients(GRADS_PATH, epoch, idx)
-            model.visualize_activations(ACTIV_PATH, data, epoch, idx)
+        # if idx % 4 == 0:
+        #     model.plot_grad_flow(GRADS_PATH, epoch, idx)
+        #     model.visualize_gradients(GRADS_PATH, epoch, idx)
+        #     model.visualize_activations(ACTIV_PATH, data, epoch, idx)
         optimizer.step()
         total_loss += train_loss.item() * data.num_nodes
         total_examples += data.num_nodes
@@ -93,10 +93,10 @@ for epoch in range(epochs):
         ########
         model.eval()
         with torch.no_grad():
-            test_loss = F.nll_loss(out[data.test_mask], data.y[data.test_mask], reduction='none')
+            test_loss = F.nll_loss(out, data.y, reduction='none')
             test_loss = (test_loss * data.node_norm)[data.test_mask].sum()
-            test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).numpy(),
-                                        data.y[data.test_mask].detach().numpy())
+            test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).cpu().numpy(),
+                                        data.y[data.test_mask].detach().cpu().numpy())
 
         print("Epoch {:05d} Partition {:05d} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} "
                 .format(epoch, idx, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))

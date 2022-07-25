@@ -41,9 +41,10 @@ class GCN(torch.nn.Module):
 
         self.conv1 = GCNConv(channels, 16)
         # self.norm1 = nn.BatchNorm1d(channels)
-        self.drop1 = nn.Dropout(p=0.2)
+        self.drop1 = nn.Dropout(p=0.1)
         self.act1 = nn.ReLU()
         self.conv2 = GCNConv(16, output_dim)
+        self.act_out = nn.Sigmoid()
 
         # self.lin1 = nn.Linear(in_features=num_node_features * self.emb_dim, out_features=output_dim)
     
@@ -55,7 +56,7 @@ class GCN(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
-        edge_index = dropout_adj(edge_index=edge_index, p=0.2, training=self.training)[0]
+        edge_index = dropout_adj(edge_index=edge_index, p=0.1, training=self.training)[0]
         # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [2708, 8598]
         x = self.sample_feats_and_mask(x.to("cpu"))
         x = x.to(self.device)
@@ -70,7 +71,7 @@ class GCN(torch.nn.Module):
         if self.softmax_out:
             return F.log_softmax(x, dim=1)
         else:
-            return x
+            return self.act_out(x)
     
     def sample_feats_and_mask(self, x):
         assert self.emb_dim == self.feat_emb_dim + self.val_emb_dim, "feat and val emb dim must match self.emb_dim"

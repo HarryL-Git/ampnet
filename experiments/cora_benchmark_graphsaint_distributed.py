@@ -15,13 +15,13 @@ from src.ampnet.module.amp_gcn import AMPGCN
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 # Global Variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
 
 
-def train(rank, size, backend='nccl'):
+def train(rank, size, backend):
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '9001'
     dist.init_process_group(backend, rank=rank, world_size=size)
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     for rank in range(size):
-        p = mp.Process(target=train, args=(rank, size, 'nccl'))
+        p = mp.Process(target=train, args=(rank, size, 'gloo'))
         p.start()
         processes.append(p)
 
