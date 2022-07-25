@@ -65,14 +65,17 @@ class TwoLayerSigmoid(torch.nn.Module):
 
 
 if TRAIN_AMPCONV:
-    model = AMPGCN(
+    model = AMPGCN(device="cpu", 
+        embedding_dim=3, 
+        num_heads=1,
         num_node_features=2, 
         num_sampled_vectors=2,
         output_dim=1, 
-        softmax_out=False,
-        feat_emb_dim=2,
+        softmax_out=False, 
+        feat_emb_dim=2, 
         val_emb_dim=1,
-        downsample_feature_vectors=False).to(device)
+        downsample_feature_vectors=False,
+        average_pooling_flag=True).to(device)
 else:
     model = GCN(
         num_node_features=2, 
@@ -94,7 +97,7 @@ test_data = Data(x=x, edge_index=edge_idx_arr, y=y)
 plot_node_features(x, y, SAVE_PATH, "xor_test_node_features.png")
 
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 criterion = nn.MSELoss()
 start_time = time.time()
 train_loss_list = []

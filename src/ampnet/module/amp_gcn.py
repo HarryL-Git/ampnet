@@ -12,26 +12,41 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
+from torch_geometric.utils.dropout import dropout_adj
 from src.ampnet.conv.amp_conv import AMPConv
 from src.ampnet.utils.utils import *
 
 
-dataset = Planetoid(root='/tmp/Cora', name='Cora')
-
 class AMPGCN(torch.nn.Module):
-    def __init__(self, device, embedding_dim=100, num_heads=2, downsampling_vectors=True, average_pooling_flag=True):
+    def __init__(self, 
+                device="cpu", 
+                embedding_dim=100, 
+                num_heads=2,
+                num_node_features=1433, 
+                num_sampled_vectors=40,
+                output_dim=7, 
+                softmax_out=True, 
+                feat_emb_dim=99, 
+                val_emb_dim=1,
+                downsample_feature_vectors=True,
+                average_pooling_flag=True):
         super().__init__()
+        assert embedding_dim == feat_emb_dim + val_emb_dim, "Feature and value dimensions do not add up to total embedding dimension"
 
         self.device = device
         self.conv1_embedding = None
         self.conv2_embedding = None
-        self.emb_dim = embedding_dim
-        self.num_sampled_vectors = 40
-        self.downsampling_vectors = downsampling_vectors
+        self.emb_dim = feat_emb_dim + val_emb_dim
+        self.num_sampled_vectors = num_sampled_vectors
+        self.num_node_features = num_node_features
+        self.output_dim = output_dim
+        self.softmax_out = softmax_out
+        self.feat_emb_dim = feat_emb_dim
+        self.val_emb_dim = val_emb_dim
+        self.downsampling_vectors = downsample_feature_vectors
         self.average_pooling_flag = average_pooling_flag
 
-        num_flattened_features = self.num_sampled_vectors * self.emb_dim if downsampling_vectors else dataset.num_node_features * self.emb_dim
-
+        # num_flattened_features = self.num_sampled_vectors * self.emb_dim if downsample_feature_vectors else dataset.num_node_features * self.emb_dim
         # self.feature_embedding_table = nn.Embedding(
         #     num_embeddings=dataset.num_node_features,
         #     embedding_dim=embedding_dim - 1
@@ -85,12 +100,15 @@ class AMPGCN(torch.nn.Module):
             out_features=self.emb_dim
         )
 
+        self.drop2 = nn.Dropout(p=0.1)
+
         self.final_linear_out = nn.Linear(
             in_features=self.emb_dim,
-            out_features=dataset.num_classes
+            out_features=output_dim
         )
 
-        self.drop2 = nn.Dropout(p=0.1)
+        self.drop3 = nn.Dropout(p=0.1)
+        self.act_out = nn.Sigmoid()
 
     def pca_embed_features(self, x, feature_embed_dim, value_embed_dim):
         pca = PCA(n_components=feature_embed_dim)
@@ -117,7 +135,7 @@ class AMPGCN(torch.nn.Module):
         sampled_node_vectors_unrolled = []
         for node_idx in range(x.shape[0]):
             # present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
-            feat_idxs = list(range(dataset.num_node_features))
+            feat_idxs = list(range(self.num_node_features))
             # sampled_feature_idxs = np.random.choice(present_feat_idxs, size=num_sampled_vectors, replace=True)
             sampled_vectors = self.feature_embedding_table.weight[feat_idxs]  # [num_sampled_vectors, emb_dim]
             sampled_vectors = torch.cat((sampled_vectors, x[node_idx].unsqueeze(-1)), dim=1)
@@ -127,9 +145,9 @@ class AMPGCN(torch.nn.Module):
         node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], num_sampled_vectors * self.emb_dim))
         return node_vectors_rerolled
 
-    def embed_features_downsample(self, x, feature_emb_dim=99, value_emb_dim=1):
-        assert self.emb_dim == feature_emb_dim + value_emb_dim, "feat and val emb dim must match self.emb_dim"
-        pca = PCA(n_components=feature_emb_dim)
+    def embed_features_and_downsample(self, x):
+        assert self.emb_dim == self.feat_emb_dim + self.val_emb_dim, "feat and val emb dim must match self.emb_dim"
+        pca = PCA(n_components=self.feat_emb_dim)
         scaler = StandardScaler()
 
         # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
@@ -139,36 +157,40 @@ class AMPGCN(torch.nn.Module):
         # Repeat and concatenate
         concatenated_flattened_vectors = torch.cat([
             feature_embedding.repeat(x.shape[0], 1),  # [1433 * num_nodes, feat_emb_dim]
-            reshaped_data.repeat(1, value_emb_dim)], dim=1)  # [1433 * num_nodes, value_emb_dim]
+            reshaped_data.repeat(1, self.val_emb_dim)], dim=1)  # [1433 * num_nodes, self.val_emb_dim]
 
         node_vectors_rolled_up = torch.reshape(concatenated_flattened_vectors,
                                                (x.shape[0],
                                                 x.shape[1] * self.emb_dim))  # [num_nodes, 1433 * emb_dim]
         
-        # First reshape into list of vectors per node
-        node_vectors_unrolled = torch.reshape(node_vectors_rolled_up, (node_vectors_rolled_up.shape[0], int(node_vectors_rolled_up.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
+        if self.downsampling_vectors:
+            # First reshape into list of vectors per node
+            node_vectors_unrolled = torch.reshape(node_vectors_rolled_up, (node_vectors_rolled_up.shape[0], int(node_vectors_rolled_up.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
 
-        # Sample 20 feature vectors per node where binary value != 0
-        sampled_node_vectors_unrolled = []
-        sampled_indices = []
-        for node_idx in range(x.shape[0]):
-            present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
-            unpresent_indices_len = dataset.num_node_features - len(present_feat_idxs)
+            # Sample 20 feature vectors per node where binary value != 0
+            sampled_node_vectors_unrolled = []
+            sampled_indices = []
+            for node_idx in range(x.shape[0]):
+                present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
+                unpresent_indices_len = self.num_node_features - len(present_feat_idxs)
 
-            sampling_probs = [0.5 / len(present_feat_idxs) if idx in present_feat_idxs else 0.5 / unpresent_indices_len for idx in range(dataset.num_node_features)]
+                sampling_probs = [0.5 / len(present_feat_idxs) if idx in present_feat_idxs else 0.5 / unpresent_indices_len for idx in range(self.num_node_features)]
 
-            feat_indices = list(range(dataset.num_node_features))
-            sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False, p=sampling_probs)
-            sampled_vectors = node_vectors_unrolled[node_idx, sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
+                feat_indices = list(range(self.num_node_features))
+                sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False, p=sampling_probs)
+                sampled_vectors = node_vectors_unrolled[node_idx, sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
 
-            sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
-            sampled_indices.append(np.expand_dims(sampled_feature_idxs, axis=0))
-        sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
-        sampled_indices = np.concatenate(sampled_indices)
+                sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
+                sampled_indices.append(np.expand_dims(sampled_feature_idxs, axis=0))
+            sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
+            sampled_indices = np.concatenate(sampled_indices)
 
-        # Roll vectors back up so that PyG is able to handle arrays
-        node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], self.num_sampled_vectors * self.emb_dim))  # [num_nodes, num_sampled_vectors * emb_dim]
-        
+            # Roll vectors back up so that PyG is able to handle arrays
+            node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], self.num_sampled_vectors * self.emb_dim))  # [num_nodes, num_sampled_vectors * emb_dim]
+        else:
+            node_vectors_rerolled = node_vectors_rolled_up
+            sampled_indices = None
+
         # Z score embedding before passing on in network
         normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled)  # node_vectors_rerolled
         normalized_node_vectors_rolled_up = torch.from_numpy(normalized_node_vectors_rolled_up_np).float()
@@ -177,43 +199,22 @@ class AMPGCN(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x: [num_nodes, 1433]
-
-        x, sampled_indices = self.embed_features_downsample(x.to("cpu"))
+        edge_index = dropout_adj(edge_index=edge_index, p=0.1, training=self.training)[0]
+        x, sampled_indices = self.embed_features_and_downsample(x.to("cpu"))
         x = x.to(self.device)
         # x becomes [num_nodes, num_feats * emb_dim], sampled_indices are [num_nodes, 20]
 
-        #---------- Block 1 ----------->
-        x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-        x_ = self.layer_norm1(x_)  # Pre-LN Transformer
-        x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-        x_ = self.conv1(x_, edge_index)
-        self.conv1_embedding = x_
         x = self.drop1(x)
-        x = x + x_  # First skip connection
+        x = self.conv1(x, edge_index)
+        self.conv1_embedding = x
+        x = F.elu(x)
 
-        x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-        x_ = self.layer_norm2(x_)
-        x_ = self.post_conv_linear1(x_)
-        x_ = F.elu(x_)
-        x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-        x = x + x_  # Second skip connection
-
-        # ---------- Block 2 ----------->
-        x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-        x_ = self.layer_norm3(x_)  # Pre-LN Transformer
-        x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-        x_ = self.conv2(x_, edge_index)
-        self.conv2_embedding = x_
         x = self.drop2(x)
-        x = x + x_  # First skip connection
+        x = self.conv2(x, edge_index)
+        self.conv2_embedding = x
+        x = F.elu(x)
 
-        x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-        x_ = self.layer_norm4(x_)
-        x_ = self.post_conv_linear2(x_)
-        x_ = F.elu(x_)
-        x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-        x = x + x_  # Second skip connection
-
+        x = self.drop3(x)
         # Reshape node features into unrolled list of feature vectors, perform average pooling
         x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
         if self.average_pooling_flag:
@@ -222,7 +223,10 @@ class AMPGCN(torch.nn.Module):
             x = x[:, 0]
 
         x = self.final_linear_out(x)
-        return F.log_softmax(x, dim=1)
+        if self.softmax_out:
+            return F.log_softmax(x, dim=1)
+        else:
+            return self.act_out(x)
     
     def visualize_gradients(self, save_path, epoch_idx, iter, color="C0"):
         """
@@ -296,67 +300,36 @@ class AMPGCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index  # x: [num_nodes, 1433]
-
-            x, sampled_indices = self.embed_features_downsample(x.to("cpu"))
+            x, sampled_indices = self.embed_features_and_downsample(x.to("cpu"))
             x = x.to(self.device)
             # x becomes [num_nodes, num_feats * emb_dim], sampled_indices are [num_nodes, 20]
 
-            # ---------- Block 1 ----------->
-            x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-            x_ = self.layer_norm1(x_)  # Pre-LN Transformer
-            activations["Norm 1"] = x_.view(-1).cpu().numpy()
-            x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-            x_ = self.conv1(x_, edge_index)
-            activations["AmpConv 1"] = x_.view(-1).cpu().numpy()
-            self.conv1_embedding = x_
             x = self.drop1(x)
-            x = x + x_  # First skip connection
+            x = self.conv1(x, edge_index)
+            activations["AmpConv 1"] = x.view(-1).cpu().numpy()
+            self.conv1_embedding = x
+            x = F.elu(x)
+            activations["ELU 1"] = x.view(-1).cpu().numpy()
 
-            x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-            x_ = self.layer_norm2(x_)
-            activations["Norm 2"] = x_.view(-1).cpu().numpy()
-            x_ = self.post_conv_linear1(x_)
-            activations["Post Conv Linear 1"] = x_.view(-1).cpu().numpy()
-            x_ = F.elu(x_)
-            x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-            x = x + x_  # Second skip connection
-
-            # ---------- Block 2 ----------->
-            x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-            x_ = self.layer_norm3(x_)  # Pre-LN Transformer
-            activations["Norm 3"] = x_.view(-1).cpu().numpy()
-            x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-            x_ = self.conv2(x_, edge_index)
-            activations["AmpConv 2"] = x_.view(-1).cpu().numpy()
-            self.conv2_embedding = x_
             x = self.drop2(x)
-            x = x + x_  # First skip connection
+            x = self.conv2(x, edge_index)
+            activations["AmpConv 2"] = x.view(-1).cpu().numpy()
+            self.conv2_embedding = x
+            x = F.elu(x)
+            activations["ELU 1"] = x.view(-1).cpu().numpy()
 
-            x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
-            x_ = self.layer_norm4(x_)
-            activations["Norm 4"] = x_.view(-1).cpu().numpy()
-            x_ = self.post_conv_linear2(x_)
-            activations["Post Conv Linear 2"] = x_.view(-1).cpu().numpy()
-            x_ = F.elu(x_)
-            x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
-            x = x + x_  # Second skip connection
-
+            x = self.drop3(x)
             # Reshape node features into unrolled list of feature vectors, perform average pooling
-            x = torch.reshape(x,
-                              (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
+            x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
             if self.average_pooling_flag:
                 x = x.mean(dim=1)  # Average pooling
+                activations["Average Pooling"] = x.view(-1).cpu().numpy()
             else:
                 x = x[:, 0]
+                activations["Class Token"] = x.view(-1).cpu().numpy()
 
             x = self.final_linear_out(x)
-            activations["Linear Layer 1"] = x_.view(-1).cpu().numpy()
-            
-            # x = self.drop2(x)
-            # x = self.act2(x)
-            # activations["ReLU 2"] = x.view(-1).numpy()
-            # x = self.lin2(x)
-            # activations["Linear Layer 2"] = x.view(-1).numpy()
+            activations["Linear Out"] = x.view(-1).cpu().numpy()
 
         # Plotting
         columns = 4
@@ -373,3 +346,108 @@ class AMPGCN(torch.nn.Module):
         plt.savefig(os.path.join(save_path, "act_distrib_ep{}_iter{}".format(epoch_idx, iter)))
         plt.clf()
         plt.close()
+
+
+"""
+Transformer block forward function
+#---------- Block 1 ----------->
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm1(x_)  # Pre-LN Transformer
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x_ = self.conv1(x_, edge_index)
+self.conv1_embedding = x_
+x = self.drop1(x)
+x = x + x_  # First skip connection
+
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm2(x_)
+x_ = self.post_conv_linear1(x_)
+x_ = F.elu(x_)
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x = x + x_  # Second skip connection
+
+# ---------- Block 2 ----------->
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm3(x_)  # Pre-LN Transformer
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x_ = self.conv2(x_, edge_index)
+self.conv2_embedding = x_
+x = self.drop2(x)
+x = x + x_  # First skip connection
+
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm4(x_)
+x_ = self.post_conv_linear2(x_)
+x_ = F.elu(x_)
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x = x + x_  # Second skip connection
+
+# Reshape node features into unrolled list of feature vectors, perform average pooling
+x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
+if self.average_pooling_flag:
+    x = x.mean(dim=1)  # Average pooling
+else:
+    x = x[:, 0]
+
+x = self.final_linear_out(x)
+return F.log_softmax(x, dim=1)
+
+
+Corresponding visualize_activations forward pass
+x, edge_index = data.x, data.edge_index  # x: [num_nodes, 1433]
+x, sampled_indices = self.embed_features_and_downsample(x.to("cpu"))
+x = x.to(self.device)
+# x becomes [num_nodes, num_feats * emb_dim], sampled_indices are [num_nodes, 20]
+
+# ---------- Block 1 ----------->
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm1(x_)  # Pre-LN Transformer
+activations["Norm 1"] = x_.view(-1).cpu().numpy()
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x_ = self.conv1(x_, edge_index)
+activations["AmpConv 1"] = x_.view(-1).cpu().numpy()
+self.conv1_embedding = x_
+x = self.drop1(x)
+x = x + x_  # First skip connection
+
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm2(x_)
+activations["Norm 2"] = x_.view(-1).cpu().numpy()
+x_ = self.post_conv_linear1(x_)
+activations["Post Conv Linear 1"] = x_.view(-1).cpu().numpy()
+x_ = F.elu(x_)
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x = x + x_  # Second skip connection
+
+# ---------- Block 2 ----------->
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm3(x_)  # Pre-LN Transformer
+activations["Norm 3"] = x_.view(-1).cpu().numpy()
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x_ = self.conv2(x_, edge_index)
+activations["AmpConv 2"] = x_.view(-1).cpu().numpy()
+self.conv2_embedding = x_
+x = self.drop2(x)
+x = x + x_  # First skip connection
+
+x_ = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+x_ = self.layer_norm4(x_)
+activations["Norm 4"] = x_.view(-1).cpu().numpy()
+x_ = self.post_conv_linear2(x_)
+activations["Post Conv Linear 2"] = x_.view(-1).cpu().numpy()
+x_ = F.elu(x_)
+x_ = torch.reshape(x_, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+x = x + x_  # Second skip connection
+
+# Reshape node features into unrolled list of feature vectors, perform average pooling
+x = torch.reshape(x,
+                    (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
+if self.average_pooling_flag:
+    x = x.mean(dim=1)  # Average pooling
+else:
+    x = x[:, 0]
+
+x = self.final_linear_out(x)
+activations["Linear Layer 1"] = x_.view(-1).cpu().numpy()
+
+"""
