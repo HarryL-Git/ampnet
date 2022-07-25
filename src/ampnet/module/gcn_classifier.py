@@ -12,27 +12,40 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from torch_geometric.utils.dropout import dropout_adj
-from torch_geometric.datasets import Planetoid
 
-dataset = Planetoid(root='/tmp/Cora', name='Cora')
 
 class GCN(torch.nn.Module):
-    def __init__(self, device="cpu"):
+    def __init__(self, 
+                device="cpu", 
+                num_node_features=1433, 
+                num_sampled_vectors=40,
+                output_dim=7, 
+                softmax_out=True, 
+                feat_emb_dim=99, 
+                val_emb_dim=1,
+                downsample_feature_vectors=True):
         super().__init__()
         print("Initializing GCN network...")
         self.device = device
-        self.emb_dim = 100
-        self.num_sampled_vectors = 400
-        channels = dataset.num_node_features * self.emb_dim
+        self.emb_dim = feat_emb_dim + val_emb_dim
+        self.num_sampled_vectors = num_sampled_vectors
+        self.num_node_features = num_node_features
+        self.output_dim = output_dim
+        self.softmax_out = softmax_out
+        self.feat_emb_dim = feat_emb_dim
+        self.val_emb_dim = val_emb_dim
+        self.downsample_feature_vectors = downsample_feature_vectors
+
+        channels = num_node_features * self.emb_dim
         self.mask_token = nn.Parameter(torch.zeros(1, self.emb_dim))
 
         self.conv1 = GCNConv(channels, 16)
         # self.norm1 = nn.BatchNorm1d(channels)
         self.drop1 = nn.Dropout(p=0.2)
         self.act1 = nn.ReLU()
-        self.conv2 = GCNConv(16, dataset.num_classes)
+        self.conv2 = GCNConv(16, output_dim)
 
-        # self.lin1 = nn.Linear(in_features=dataset.num_node_features * self.emb_dim, out_features=dataset.num_classes)
+        # self.lin1 = nn.Linear(in_features=num_node_features * self.emb_dim, out_features=output_dim)
     
         self.initialize_weights()
     
@@ -54,11 +67,14 @@ class GCN(torch.nn.Module):
         x = self.conv2(x, edge_index)
 
         # x = self.lin1(x)
-        return F.log_softmax(x, dim=1)
+        if self.softmax_out:
+            return F.log_softmax(x, dim=1)
+        else:
+            return x
     
-    def sample_feats_and_mask(self, x, feature_emb_dim=99, value_emb_dim=1):
-        assert self.emb_dim == feature_emb_dim + value_emb_dim, "feat and val emb dim must match self.emb_dim"
-        pca = PCA(n_components=feature_emb_dim)
+    def sample_feats_and_mask(self, x):
+        assert self.emb_dim == self.feat_emb_dim + self.val_emb_dim, "feat and val emb dim must match self.emb_dim"
+        pca = PCA(n_components=self.feat_emb_dim)
         scaler = StandardScaler()
 
         # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
@@ -68,32 +84,35 @@ class GCN(torch.nn.Module):
         # Repeat and concatenate
         concatenated_flattened_vectors = torch.cat([
             feature_embedding.repeat(x.shape[0], 1),  # [1433 * num_nodes, feat_emb_dim]
-            reshaped_data.repeat(1, value_emb_dim)], dim=1)  # [1433 * num_nodes, value_emb_dim]
+            reshaped_data.repeat(1, self.val_emb_dim)], dim=1)  # [1433 * num_nodes, self.val_emb_dim]
 
         node_vectors_rolled_up = torch.reshape(concatenated_flattened_vectors,
                                         (x.shape[0],
                                         x.shape[1] * self.emb_dim))  # [num_nodes, 1433 * emb_dim]
         
-        # First reshape into list of vectors per node
-        node_vectors_unrolled = torch.reshape(node_vectors_rolled_up, (node_vectors_rolled_up.shape[0], int(node_vectors_rolled_up.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
+        if self.downsample_feature_vectors:
+            # First reshape into list of vectors per node
+            node_vectors_unrolled = torch.reshape(node_vectors_rolled_up, (node_vectors_rolled_up.shape[0], int(node_vectors_rolled_up.shape[1] / self.emb_dim), self.emb_dim))  # [num_nodes, 1433, emb_dim]
 
-        # Sample 20 feature vectors, skewing to balance 1s and 0s. Mask out all unsampled vectors with mask tokens
-        for node_idx in range(x.shape[0]):
-            present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
-            unpresent_indices_len = dataset.num_node_features - len(present_feat_idxs)
+            # Sample 20 feature vectors, skewing to balance 1s and 0s. Mask out all unsampled vectors with mask tokens
+            for node_idx in range(x.shape[0]):
+                present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
+                unpresent_indices_len = self.num_node_features - len(present_feat_idxs)
 
-            sampling_probs = [0.5 / len(present_feat_idxs) if idx in present_feat_idxs else 0.5 / unpresent_indices_len for idx in range(dataset.num_node_features)]
+                sampling_probs = [0.5 / len(present_feat_idxs) if idx in present_feat_idxs else 0.5 / unpresent_indices_len for idx in range(self.num_node_features)]
 
-            feat_indices = list(range(dataset.num_node_features))
-            sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False, p=sampling_probs)
+                feat_indices = list(range(self.num_node_features))
+                sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False, p=sampling_probs)
 
-            # Mask out all unsampled feature vectors with mask token
-            for feat_idx in range(node_vectors_unrolled.shape[1]):
-                if feat_idx not in sampled_feature_idxs:
-                    node_vectors_unrolled[node_idx, feat_idx] = self.mask_token
+                # Mask out all unsampled feature vectors with mask token
+                for feat_idx in range(node_vectors_unrolled.shape[1]):
+                    if feat_idx not in sampled_feature_idxs:
+                        node_vectors_unrolled[node_idx, feat_idx] = self.mask_token
 
-        # Roll vectors back up so that PyG is able to handle arrays
-        node_vectors_rerolled = torch.reshape(node_vectors_unrolled, (x.shape[0], node_vectors_unrolled.shape[1] * self.emb_dim))  # [num_nodes, num_feats * emb_dim]
+            # Roll vectors back up so that PyG is able to handle arrays
+            node_vectors_rerolled = torch.reshape(node_vectors_unrolled, (x.shape[0], node_vectors_unrolled.shape[1] * self.emb_dim))  # [num_nodes, num_feats * emb_dim]
+        else:
+            node_vectors_rerolled = node_vectors_rolled_up
         
         # Z score embedding before passing on in network
         normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled.detach().numpy())

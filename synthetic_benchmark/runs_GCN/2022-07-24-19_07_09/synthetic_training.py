@@ -69,12 +69,10 @@ if TRAIN_AMPCONV:
 else:
     model = GCN(
         num_node_features=2, 
-        num_sampled_vectors=2,
         output_dim=1, 
         softmax_out=False,
         feat_emb_dim=2,
-        val_emb_dim=1,
-        downsample_feature_vectors=False).to(device)
+        val_emb_dim=1).to(device)
 # model = TwoLayerSigmoid()
 # model = LinearLayer()
 
