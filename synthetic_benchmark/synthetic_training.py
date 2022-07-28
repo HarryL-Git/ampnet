@@ -10,6 +10,8 @@ from torch_geometric.data import Data
 from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 from src.ampnet.module.amp_gcn import AMPGCN
+from src.ampnet.module.linear_layer import LinearLayer
+from src.ampnet.module.two_layer_sigmoid_mlp import TwoLayerSigmoid
 from synthetic_benchmark.synthetic_xor import create_data, plot_node_features
 
 
@@ -35,33 +37,6 @@ if not os.path.exists(GRADS_PATH):
     os.mkdir(GRADS_PATH)
 if not os.path.exists(ACTIV_PATH):
     os.mkdir(ACTIV_PATH)
-
-
-class LinearLayer(torch.nn.Module):
-    def __init__(self, device="cpu"):
-        super().__init__()
-        self.lin1 = nn.Linear(in_features=2, out_features=1)
-
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index  # x is [num_samples, 2]
-        x = self.lin1(x)
-        return x
-
-
-class TwoLayerSigmoid(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        print("Running Two Layer MLP with Sigmoid Activation")
-        self.lin1 = nn.Linear(in_features=2, out_features=2)
-        self.act1 = nn.Sigmoid()
-        self.lin2 = nn.Linear(in_features=2, out_features=1)
-
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index  # x is [num_samples, 2]
-        x = self.lin1(x)
-        x = self.act1(x)
-        x = self.lin2(x)
-        return x
 
 
 if TRAIN_AMPCONV:

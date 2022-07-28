@@ -20,7 +20,25 @@ Notes:
 """
 
 
-def create_data(num_samples: int, noise_std: float=0.1, same_class_link_prob: float=0.7, diff_class_link_prob: float=0.1):
+def create_sparse_redundant_xor_data(
+    num_samples: int, 
+    noise_std: float=0.1, 
+    same_class_link_prob: float=0.7, 
+    diff_class_link_prob: float=0.1,
+    dropout_rate: float=0.8):
+    """
+    Idea for making XOR feature dataset sparse and redundant:
+    1. Duplicate two XOR features many times (redudancy)
+    2. Apply high-percentage dropout (sparsity)
+    """
+    pass
+
+
+def create_data(
+    num_samples: int, 
+    noise_std: float=0.1, 
+    same_class_link_prob: float=0.7, 
+    diff_class_link_prob: float=0.1):
     """
     This function creates a toy synthetic dataset where samples resemble a fuzzy XOR function.
     The goal is to create a reusable data-generation function which can create train/test graphs
