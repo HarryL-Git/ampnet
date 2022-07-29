@@ -5,14 +5,13 @@ import datetime
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch_geometric.data import Data
 from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 from src.ampnet.module.amp_gcn import AMPGCN
 from src.ampnet.module.linear_layer import LinearLayer
 from src.ampnet.module.two_layer_sigmoid_mlp import TwoLayerSigmoid
-from synthetic_benchmark.synthetic_xor import create_data, plot_node_features
+from synthetic_benchmark.synthetic_xor import create_xor_data, plot_node_features
 
 
 # Global variables
@@ -64,10 +63,10 @@ else:
 # model = LinearLayer()
 
 # Define data
-x, y, adj_matrix, edge_idx_arr = create_data(num_samples=40, noise_std=0.05, same_class_link_prob=0.8, diff_class_link_prob=0.05)
+x, y, adj_matrix, edge_idx_arr = create_xor_data(num_samples=40, noise_std=0.05, same_class_link_prob=0.8, diff_class_link_prob=0.05)
 train_data = Data(x=x, edge_index=edge_idx_arr, y=y)
 plot_node_features(x, y, SAVE_PATH, "xor_train_node_features.png")
-x, y, adj_matrix, edge_idx_arr = create_data(num_samples=40, noise_std=0.05, same_class_link_prob=0.8, diff_class_link_prob=0.05)
+x, y, adj_matrix, edge_idx_arr = create_xor_data(num_samples=40, noise_std=0.05, same_class_link_prob=0.8, diff_class_link_prob=0.05)
 test_data = Data(x=x, edge_index=edge_idx_arr, y=y)
 plot_node_features(x, y, SAVE_PATH, "xor_test_node_features.png")
 

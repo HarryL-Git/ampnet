@@ -14,7 +14,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.utils.dropout import dropout_adj
 
 
-class GCN(torch.nn.Module):
+class GCNOneLayer(torch.nn.Module):
     def __init__(self, 
                 device="cpu", 
                 num_node_features=1433, 
@@ -43,14 +43,10 @@ class GCN(torch.nn.Module):
         channels = num_node_features * self.emb_dim
         self.mask_token = nn.Parameter(torch.zeros(1, self.emb_dim))
 
-        self.conv1 = GCNConv(channels, 16)
+        self.conv1 = GCNConv(channels, output_dim)
         # self.norm1 = nn.BatchNorm1d(channels)
         self.drop1 = nn.Dropout(p=dropout_rate)
-        self.act1 = nn.ReLU()
-        self.conv2 = GCNConv(16, output_dim)
         self.act_out = nn.Sigmoid()
-
-        # self.lin1 = nn.Linear(in_features=num_node_features * self.emb_dim, out_features=output_dim)
     
         self.initialize_weights()
     
@@ -65,11 +61,8 @@ class GCN(torch.nn.Module):
         x = self.sample_feats_and_mask(x.to("cpu"))
         x = x.to(self.device)
 
-        x = self.conv1(x, edge_index)
-        # x = self.norm1(x)
         x = self.drop1(x)
-        x = self.act1(x)
-        x = self.conv2(x, edge_index)
+        x = self.conv1(x, edge_index)
 
         # x = self.lin1(x)
         if self.softmax_out:

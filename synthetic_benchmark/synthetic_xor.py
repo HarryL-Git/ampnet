@@ -34,7 +34,7 @@ def create_sparse_redundant_xor_data(
     pass
 
 
-def create_data(
+def create_xor_data(
     num_samples: int, 
     noise_std: float=0.1, 
     same_class_link_prob: float=0.7, 
