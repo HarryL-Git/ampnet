@@ -24,10 +24,9 @@ class GCNOneLayer(torch.nn.Module):
                 feat_emb_dim=99, 
                 val_emb_dim=1,
                 downsample_feature_vectors=True,
-                dropout_rate=0.1,
+                dropout_rate=0.0,
                 dropout_adj_rate=0.1):
         super().__init__()
-        print("Initializing GCN network...")
         self.device = device
         self.emb_dim = feat_emb_dim + val_emb_dim
         self.num_sampled_vectors = num_sampled_vectors

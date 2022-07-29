@@ -1,5 +1,6 @@
 from torch_geometric.data import Data
 from src.ampnet.module.gcn_classifier import GCN
+from src.ampnet.module.gcn_one_layer import GCNOneLayer
 from src.ampnet.module.amp_gcn import AMPGCN
 from src.ampnet.module.linear_layer import LinearLayer
 from src.ampnet.module.two_layer_sigmoid_mlp import TwoLayerSigmoid
@@ -42,6 +43,17 @@ def get_model(model_name, dropout):
             average_pooling_flag=True)
     elif model_name == "GCN":
         model = GCN(
+            num_node_features=2, 
+            num_sampled_vectors=2,
+            output_dim=1, 
+            softmax_out=False,
+            feat_emb_dim=2,
+            val_emb_dim=1,
+            downsample_feature_vectors=False,
+            dropout_rate=dropout,
+            dropout_adj_rate=dropout)
+    elif model_name == "GCN":
+        model = GCNOneLayer(
             num_node_features=2, 
             num_sampled_vectors=2,
             output_dim=1, 

@@ -18,7 +18,7 @@ def plot_search_figure(expt_dropout_val_list, expt_acc_list, acc_type_list, fig_
         "Accuracy": expt_acc_list,  
         "Train-test": acc_type_list
     })
-    sns.boxplot(x="Dropout Value", y="Accuracy", hue="Train-test", data=visual_df, palette="time")
+    sns.boxplot(x="Dropout Value", y="Accuracy", hue="Train-test", data=visual_df)
     plt.savefig(os.path.join(fig_save_path, "dropout_search_figure.png"), facecolor="white", bbox_inches="tight")
     plt.close()
 
@@ -30,30 +30,31 @@ def collect_results(result):
 
 
 def run_experiment(save_path, args, process_idx):
-    expt_save_path = os.path.join(save_path, datetime.now().strftime('%Y-%m-%d-%H_%M_%S'))
+    print("Process {}, Experiment Index {}, Dropout {}".format(os.getpid(), process_idx, args["dropout"]))
+
+    expt_save_path = os.path.join(save_path, datetime.now().strftime('%Y-%m-%d-%H_%M_%S') + "_{}_{}".format(process_idx, args["dropout"]))
     expt_grads_path = os.path.join(expt_save_path, "gradients")
     expt_activ_path = os.path.join(expt_save_path, "activations")
 
     if not os.path.exists(expt_save_path):
         os.mkdir(expt_save_path)
-        os.system("cp ./synthetic_benchmark/synthetic_training.py {}/".format(expt_save_path))
         # os.system("touch {}".format(os.path.join(expt_save_path, "_details.txt")))
-        with open(os.path.join(expt_save_path, "_details.txt"), "w") as logfile:
-            logfile.write("Training with dropout rate {}".format(args["dropout"]))
+        logfile = open(os.path.join(expt_save_path, "_details.txt"), "w")
+        logfile.write("Training {} with dropout rate {}\n\n".format(args["model_name"], args["dropout"]))
     if not os.path.exists(expt_grads_path):
         os.mkdir(expt_grads_path)
     if not os.path.exists(expt_activ_path):
         os.mkdir(expt_activ_path)
 
-    print("Training with dropout {}".format(args["dropout"]))
     start_time = time.time()
     max_train_accuracy, max_test_accuracy = train_model(
         args=args, 
         save_path=expt_save_path, 
         grads_path=expt_grads_path, 
-        activ_path=expt_activ_path)
-    print("Training took {} minutes.".format((time.time() - start_time) / 60.))
-    print("Max train acc {}, max test acc {}".format(max_train_accuracy, max_test_accuracy), "\n")
+        activ_path=expt_activ_path,
+        logfile=logfile)
+    logfile.write("Training took {} minutes.\n".format((time.time() - start_time) / 60.))
+    logfile.write("Max train acc {}, max test acc {}\n".format(max_train_accuracy, max_test_accuracy))
 
     # Return tuple of results which can be sorted with other experiment process results and processed later
     return (process_idx, (args["dropout"], max_train_accuracy, "Train"), (args["dropout"], max_test_accuracy, "Test"))
@@ -72,7 +73,7 @@ def controller(save_path, args):
 
     # Testing dropout values:
     # Define variables
-    dropout_values = [0.7, 0.8, 0.9]  # , 0.25, 0.5
+    dropout_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 
     # Multiprocessing
     num_cpus = mp.cpu_count() - 2
@@ -86,7 +87,6 @@ def controller(save_path, args):
                     args=(save_path, args, counter), 
                     callback=collect_results)
                 counter += 1
-                time.sleep(5)  # Sleep for 5 seconds so that experiments have different datetimes
         pool.close()
         pool.join()
     # run_experiment(save_path, args, 0)  # For debugging
@@ -108,6 +108,13 @@ def controller(save_path, args):
         expt_acc_list.append(result[2][1])
         acc_type_list.append(result[2][2])
     
+    df = pd.DataFrame({
+        "Dropout Value": expt_dropout_val_list,
+        "Accuracy": expt_acc_list,
+        "Accuracy Type": acc_type_list
+    })
+    df.to_csv(os.path.join(save_path, "experiment_results_arr.csv"), index=False)
+    
     plot_search_figure(expt_dropout_val_list, expt_acc_list, acc_type_list, fig_save_path=save_path)
 
 
@@ -124,7 +131,7 @@ def main():
         "num_samples": 40,
         "same_class_link_prob": 0.8,
     }
-    assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "AMPNet"]
+    assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
     # Create save paths
     save_path = "./synthetic_benchmark/runs_{}".format(ARGS["model_name"])
@@ -135,6 +142,7 @@ def main():
     save_path = os.path.join(save_path, datetime.now().strftime('%Y-%m-%d-%H_%M_%S') + "_search")
     if not os.path.exists(save_path):
         os.mkdir(save_path)
+        os.system("cp ./synthetic_benchmark/gridsearch.py {}/".format(save_path))
 
     # Run experiments
     start_time = time.time()

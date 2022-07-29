@@ -27,7 +27,7 @@ class GCN(torch.nn.Module):
                 dropout_rate=0.1,
                 dropout_adj_rate=0.1):
         super().__init__()
-        print("Initializing GCN network...")
+        # print("Initializing GCN network...")
         self.device = device
         self.emb_dim = feat_emb_dim + val_emb_dim
         self.num_sampled_vectors = num_sampled_vectors

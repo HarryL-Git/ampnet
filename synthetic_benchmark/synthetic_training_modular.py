@@ -10,7 +10,7 @@ from synthetic_benchmark.xor_training_utils import get_xor_data, get_model
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def train_model(args, save_path, grads_path, activ_path):
+def train_model(args, save_path, grads_path, activ_path, logfile=None):
     # Define model
     model = get_model(args["model_name"], args["dropout"])
     model.to(device)
@@ -55,8 +55,13 @@ def train_model(args, save_path, grads_path, activ_path):
             test_loss = criterion(out.squeeze(-1), test_data.y)
             test_accuracy = accuracy(pred.detach().numpy(), train_data.y.detach().numpy())
         
-        print("Epoch {:05d} | Train Loss {:.4f}; Acc {:.4f} | Test Loss {:.4f} | Acc {:.4f} "
-                .format(epoch, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))
+        epoch_acc_str = "Epoch {:05d} | Train Loss {:.4f}; Acc {:.4f} | Test Loss {:.4f} | Acc {:.4f} " \
+            .format(epoch, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy)
+        if logfile is None:
+            print(epoch_acc_str)
+        else:
+            logfile.write(epoch_acc_str + "\n")
+            logfile.flush()
         train_loss_list.append(train_loss.item())
         train_acc_list.append(train_accuracy)
         test_loss_list.append(test_loss.item())
@@ -84,12 +89,12 @@ if __name__ == "__main__":
         "dropout": 0.2,
         "epochs": 200,
         "learning_rate": 0.01,
-        "model_name": "GCN",
+        "model_name": "GCNOneLayer",
         "noise_std": 0.05,
         "num_samples": 40,
         "same_class_link_prob": 0.8,
     }
-    assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "AMPNet"]
+    assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
     # Create save paths
     save_path = "./synthetic_benchmark/runs_{}".format(ARGS["model_name"])

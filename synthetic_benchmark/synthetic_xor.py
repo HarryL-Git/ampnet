@@ -132,7 +132,7 @@ def plot_graph(adj_matrix, labels):
 
 if __name__ == "__main__":
     # For debugging purposes
-    x, y, adj_matrix, edge_idx_arr = create_data(num_samples=20, noise_std=0.05, same_class_link_prob=0.7, diff_class_link_prob=0.1)
+    x, y, adj_matrix, edge_idx_arr = create_xor_data(num_samples=20, noise_std=0.3, same_class_link_prob=0.7, diff_class_link_prob=0.1)
     print("Node features:\n", x, "\n")
     print("Labels:\n", y, "\n")
     print("Adjacency Matrix:\n", adj_matrix, "\n")
