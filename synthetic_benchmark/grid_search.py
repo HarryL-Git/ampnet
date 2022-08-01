@@ -76,7 +76,7 @@ def controller(save_path, args):
     dropout_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 
     # Multiprocessing
-    num_cpus = mp.cpu_count() - 2
+    num_cpus = mp.cpu_count() - 4
     counter = 0
     with mp.Pool(processes=num_cpus) as pool:
         for dropout_val in dropout_values:
@@ -87,6 +87,7 @@ def controller(save_path, args):
                     args=(save_path, args, counter), 
                     callback=collect_results)
                 counter += 1
+                time.sleep(4)
         pool.close()
         pool.join()
     # run_experiment(save_path, args, 0)  # For debugging
@@ -122,7 +123,7 @@ def main():
     # Arguments
     ARGS = {
         "diff_class_link_prob": 0.05,
-        "dropout": 0.3,
+        "dropout": 0.0,
         "epochs": 200,
         "experiment_repeats": 20,
         "learning_rate": 0.01,
@@ -142,7 +143,7 @@ def main():
     save_path = os.path.join(save_path, datetime.now().strftime('%Y-%m-%d-%H_%M_%S') + "_search")
     if not os.path.exists(save_path):
         os.mkdir(save_path)
-        os.system("cp ./synthetic_benchmark/gridsearch.py {}/".format(save_path))
+        os.system("cp ./synthetic_benchmark/grid_search.py {}/".format(save_path))
 
     # Run experiments
     start_time = time.time()

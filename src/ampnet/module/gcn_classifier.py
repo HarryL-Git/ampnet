@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.lines import Line2D
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 import torch
 import torch.nn as nn
@@ -18,6 +18,7 @@ class GCN(torch.nn.Module):
     def __init__(self, 
                 device="cpu", 
                 num_node_features=1433, 
+                hidden_dim=16,
                 num_sampled_vectors=40,
                 output_dim=7, 
                 softmax_out=True, 
@@ -40,17 +41,17 @@ class GCN(torch.nn.Module):
         self.dropout_rate = dropout_rate
         self.dropout_adj_rate = dropout_adj_rate
 
-        channels = num_node_features * self.emb_dim
+        channels = 2  # num_node_features * self.emb_dim
         self.mask_token = nn.Parameter(torch.zeros(1, self.emb_dim))
 
-        self.conv1 = GCNConv(channels, 16)
-        # self.norm1 = nn.BatchNorm1d(channels)
-        self.drop1 = nn.Dropout(p=dropout_rate)
-        self.act1 = nn.ReLU()
-        self.conv2 = GCNConv(16, output_dim)
-        self.act_out = nn.Sigmoid()
 
-        # self.lin1 = nn.Linear(in_features=num_node_features * self.emb_dim, out_features=output_dim)
+        self.conv1 = GCNConv(channels, hidden_dim)
+        # self.norm1 = nn.BatchNorm1d(hidden_dim)
+        self.act1 = nn.ReLU()
+        self.drop1 = nn.Dropout(p=dropout_rate)
+        self.conv2 = GCNConv(hidden_dim, output_dim)
+
+        self.act_out = nn.Sigmoid()
     
         self.initialize_weights()
     
@@ -62,13 +63,14 @@ class GCN(torch.nn.Module):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
         edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
         # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [2708, 8598]
-        x = self.sample_feats_and_mask(x.to("cpu"))
+        # x = self.sample_feats_and_mask(x.to("cpu"))
+        x = self.normalize_features(x.to("cpu"))
         x = x.to(self.device)
 
         x = self.conv1(x, edge_index)
         # x = self.norm1(x)
-        x = self.drop1(x)
         x = self.act1(x)
+        x = self.drop1(x)
         x = self.conv2(x, edge_index)
 
         # x = self.lin1(x)
@@ -77,6 +79,13 @@ class GCN(torch.nn.Module):
         else:
             return self.act_out(x)
     
+    def normalize_features(self, x):
+        scaler = StandardScaler()
+        x_ = scaler.fit_transform(x.detach().numpy())
+        x_ = torch.from_numpy(x_).float()
+        x_ = x_.requires_grad_(True)
+        return x_
+    
     def sample_feats_and_mask(self, x):
         assert self.emb_dim == self.feat_emb_dim + self.val_emb_dim, "feat and val emb dim must match self.emb_dim"
         pca = PCA(n_components=self.feat_emb_dim)
@@ -84,6 +93,7 @@ class GCN(torch.nn.Module):
 
         # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
         feature_embedding = torch.from_numpy(pca.fit_transform(x.numpy().transpose()))  # feat embedding: [1433, feat_emb_dim]
+        feature_embedding = torch.zeros((2,2))
         reshaped_data = torch.reshape(x, (x.shape[0] * x.shape[1], 1))  # reshaped_data: [1433 * num_nodes, 1]
 
         # Repeat and concatenate
@@ -120,10 +130,13 @@ class GCN(torch.nn.Module):
             node_vectors_rerolled = node_vectors_rolled_up
         
         # Z score embedding before passing on in network
-        normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled.detach().numpy())
-        normalized_node_vectors_rolled_up = torch.tensor(normalized_node_vectors_rolled_up_np, requires_grad=True).float()  # torch.from_numpy(normalized_node_vectors_rolled_up_np).float()
+        # normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled.detach().numpy())
+        # node_vectors_rolled_up =  torch.from_numpy(normalized_node_vectors_rolled_up_np).float()
+
+        # node_vectors_rerolled = (node_vectors_rerolled - node_vectors_rerolled.mean()) / node_vectors_rerolled.std()
+        node_vectors_rolled_up = node_vectors_rerolled.requires_grad_(True)
         
-        return normalized_node_vectors_rolled_up
+        return node_vectors_rolled_up
 
     def visualize_gradients(self, save_path, epoch_idx, iter, color="C0"):
         """
@@ -198,17 +211,17 @@ class GCN(torch.nn.Module):
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index
             # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)
-            x = self.sample_feats_and_mask(x.to("cpu"))
+            # x = self.sample_feats_and_mask(x.to("cpu"))
             x = x.to(self.device)
-            activations["Embedded Feats"] = x.view(-1).cpu().numpy()
+            # activations["Embedded Feats"] = x.view(-1).cpu().numpy()
 
             x = self.conv1(x, edge_index)
             activations["GCN Layer 1"] = x.view(-1).cpu().numpy()
             # x = self.norm1(x)
             # activations["Norm Layer 1"] = x.view(-1).numpy()
-            x = self.drop1(x)
             x = self.act1(x)
             activations["ReLU 1"] = x.view(-1).cpu().numpy()
+            x = self.drop1(x)
             x = self.conv2(x, edge_index)
             activations["GCN Layer 2"] = x.view(-1).cpu().numpy()
 

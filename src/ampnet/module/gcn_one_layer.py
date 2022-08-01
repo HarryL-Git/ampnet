@@ -44,7 +44,7 @@ class GCNOneLayer(torch.nn.Module):
 
         self.conv1 = GCNConv(channels, output_dim)
         # self.norm1 = nn.BatchNorm1d(channels)
-        self.drop1 = nn.Dropout(p=dropout_rate)
+        # self.drop1 = nn.Dropout(p=dropout_rate)
         self.act_out = nn.Sigmoid()
     
         self.initialize_weights()
@@ -60,7 +60,7 @@ class GCNOneLayer(torch.nn.Module):
         x = self.sample_feats_and_mask(x.to("cpu"))
         x = x.to(self.device)
 
-        x = self.drop1(x)
+        # x = self.drop1(x)
         x = self.conv1(x, edge_index)
 
         # x = self.lin1(x)
@@ -72,7 +72,7 @@ class GCNOneLayer(torch.nn.Module):
     def sample_feats_and_mask(self, x):
         assert self.emb_dim == self.feat_emb_dim + self.val_emb_dim, "feat and val emb dim must match self.emb_dim"
         pca = PCA(n_components=self.feat_emb_dim)
-        scaler = StandardScaler()
+        # scaler = StandardScaler()
 
         # x is [num_nodes, 1433]. Transpose is [1433, num_nodes]
         feature_embedding = torch.from_numpy(pca.fit_transform(x.numpy().transpose()))  # feat embedding: [1433, feat_emb_dim]
@@ -112,10 +112,12 @@ class GCNOneLayer(torch.nn.Module):
             node_vectors_rerolled = node_vectors_rolled_up
         
         # Z score embedding before passing on in network
-        normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled.detach().numpy())
-        normalized_node_vectors_rolled_up = torch.tensor(normalized_node_vectors_rolled_up_np, requires_grad=True).float()  # torch.from_numpy(normalized_node_vectors_rolled_up_np).float()
+        # normalized_node_vectors_rolled_up_np = scaler.fit_transform(node_vectors_rerolled.detach().numpy())
+        node_vectors_rerolled = (node_vectors_rerolled - node_vectors_rerolled.mean()) / node_vectors_rerolled.std()
+
+        node_vectors_rolled_up = node_vectors_rerolled.requires_grad_(True)
         
-        return normalized_node_vectors_rolled_up
+        return node_vectors_rolled_up
 
     def visualize_gradients(self, save_path, epoch_idx, iter, color="C0"):
         """
@@ -128,11 +130,11 @@ class GCNOneLayer(torch.nn.Module):
         if not os.path.exists(gradient_distrib_save_path):
             os.mkdir(gradient_distrib_save_path)
         
-        columns = len(grads)
+        columns = 1  # len(grads)
         fig, ax = plt.subplots(1, columns, figsize=(columns*4, 4))
         fig_index = 0
         for key in grads:
-            key_ax = ax[fig_index%columns]
+            key_ax = ax
             sns.histplot(data=grads[key], bins=30, ax=key_ax, color=color, kde=True)
             mean = grads[key].mean()
             median = grads[key].median()
@@ -194,23 +196,17 @@ class GCNOneLayer(torch.nn.Module):
             x = x.to(self.device)
             activations["Embedded Feats"] = x.view(-1).cpu().numpy()
 
+            # x = self.drop1(x)
             x = self.conv1(x, edge_index)
             activations["GCN Layer 1"] = x.view(-1).cpu().numpy()
-            # x = self.norm1(x)
-            # activations["Norm Layer 1"] = x.view(-1).numpy()
-            x = self.drop1(x)
-            x = self.act1(x)
-            activations["ReLU 1"] = x.view(-1).cpu().numpy()
-            x = self.conv2(x, edge_index)
-            activations["GCN Layer 2"] = x.view(-1).cpu().numpy()
 
         ## Plotting
-        columns = 2
+        columns = 1
         rows = math.ceil(len(activations)/columns)
         fig, ax = plt.subplots(rows, columns, figsize=(columns*2.7, rows*2.5))
         fig_index = 0
         for key in activations:
-            key_ax = ax[fig_index//columns][fig_index%columns]
+            key_ax = ax[fig_index//columns]
             sns.histplot(data=activations[key], bins=50, ax=key_ax, color=color, kde=True, stat="density")
             key_ax.set_title(f"Layer {key}")
             fig_index += 1

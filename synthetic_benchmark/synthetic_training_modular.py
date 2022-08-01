@@ -23,8 +23,8 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         diff_class_link_prob=args["diff_class_link_prob"], 
         save_path=save_path)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"])
-    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"], weight_decay=0)
+    criterion = nn.NLLLoss()
     
     train_loss_list = []
     train_acc_list = []
@@ -36,12 +36,13 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         optimizer.zero_grad()
 
         out = model(train_data)
-        train_loss = criterion(out.squeeze(-1), train_data.y)
-        pred = (out.squeeze(-1) > 0.5).float()
+        train_loss = criterion(out, train_data.y.long())
+        # pred = (out.squeeze(-1) > 0.5).float()
+        pred = torch.argmax(out, dim=1)
         train_accuracy = accuracy(pred.detach().numpy(), train_data.y.detach().numpy())
 
         train_loss.backward()
-        if epoch % 4 == 0:
+        if epoch % args["gradient_activ_save_freq"] == 0:
             model.plot_grad_flow(grads_path, epoch, iter=0)
             model.visualize_gradients(grads_path, epoch, iter=0)
             model.visualize_activations(activ_path, train_data, epoch, iter=0)
@@ -51,9 +52,10 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         model.eval()
         with torch.no_grad():
             out = model(test_data)
-            pred = (out.squeeze(-1) > 0.5).float()
-            test_loss = criterion(out.squeeze(-1), test_data.y)
-            test_accuracy = accuracy(pred.detach().numpy(), train_data.y.detach().numpy())
+            # pred = (out.squeeze(-1) > 0.5).float()
+            pred = torch.argmax(out, dim=1)
+            test_loss = criterion(out, test_data.y.long())
+            test_accuracy = accuracy(pred.detach().numpy(), test_data.y.detach().numpy())
         
         epoch_acc_str = "Epoch {:05d} | Train Loss {:.4f}; Acc {:.4f} | Test Loss {:.4f} | Acc {:.4f} " \
             .format(epoch, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy)
@@ -86,12 +88,13 @@ if __name__ == "__main__":
     # Arguments
     ARGS = {
         "diff_class_link_prob": 0.05,
-        "dropout": 0.2,
+        "dropout": 0.0,
         "epochs": 200,
+        "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
-        "model_name": "GCNOneLayer",
-        "noise_std": 0.05,
-        "num_samples": 40,
+        "model_name": "GCN",
+        "noise_std": 0.00,
+        "num_samples": 800,
         "same_class_link_prob": 0.8,
     }
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
@@ -108,7 +111,7 @@ if __name__ == "__main__":
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
         os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-        os.system("cp ./synthetic_benchmark/synthetic_training.py {}/".format(SAVE_PATH))
+        os.system("cp ./synthetic_benchmark/synthetic_training_modular.py {}/".format(SAVE_PATH))
     if not os.path.exists(GRADS_PATH):
         os.mkdir(GRADS_PATH)
     if not os.path.exists(ACTIV_PATH):
