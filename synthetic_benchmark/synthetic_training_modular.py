@@ -23,7 +23,7 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         diff_class_link_prob=args["diff_class_link_prob"], 
         save_path=save_path)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"], weight_decay=0)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"], weight_decay=5e-4)
     criterion = nn.NLLLoss()
     
     train_loss_list = []
@@ -89,11 +89,11 @@ if __name__ == "__main__":
     ARGS = {
         "diff_class_link_prob": 0.05,
         "dropout": 0.0,
-        "epochs": 200,
+        "epochs": 300,
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "GCN",
-        "noise_std": 0.00,
+        "noise_std": 0.005,
         "num_samples": 800,
         "same_class_link_prob": 0.8,
     }

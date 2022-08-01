@@ -57,6 +57,7 @@ class GCNOneLayer(torch.nn.Module):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
         edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
         # x = self.embed_features(x, feature_embed_dim=5, value_embed_dim=1)  # x becomes [2708, 8598]
+        assert False, "Need to update feature normalization in GCNOneLayer"
         x = self.sample_feats_and_mask(x.to("cpu"))
         x = x.to(self.device)
 

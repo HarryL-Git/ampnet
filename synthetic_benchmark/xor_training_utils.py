@@ -16,6 +16,7 @@ def get_xor_data(num_samples, noise_std, same_class_link_prob, diff_class_link_p
     train_data = Data(x=x, edge_index=edge_idx_arr, y=y)
     plot_node_features(x, y, save_path, "xor_train_node_features.png")
 
+    # Fixed number of test samples
     x, y, adj_matrix, edge_idx_arr = create_xor_data(
         num_samples=num_samples, 
         noise_std=noise_std, 
@@ -57,8 +58,8 @@ def get_model(model_name, dropout):
         model = GCNOneLayer(
             num_node_features=2, 
             num_sampled_vectors=2,
-            output_dim=1, 
-            softmax_out=False,
+            output_dim=2, 
+            softmax_out=True,
             feat_emb_dim=2,
             val_emb_dim=1,
             downsample_feature_vectors=False,
