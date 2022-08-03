@@ -14,12 +14,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def plot_search_figure(expt_val_list, expt_acc_list, acc_type_list, fig_save_path):
     visual_df = pd.DataFrame({
-        "Num Samples Value": expt_val_list,
+        "Same Class Link Probability": expt_val_list,
         "Accuracy": expt_acc_list,  
         "Train-test": acc_type_list
     })
-    sns.boxplot(x="Num Samples Value", y="Accuracy", hue="Train-test", data=visual_df)
-    plt.savefig(os.path.join(fig_save_path, "num_samples_search_figure.png"), facecolor="white", bbox_inches="tight")
+    sns.boxplot(x="Same Class Link Probability", y="Accuracy", hue="Train-test", data=visual_df)
+    plt.savefig(os.path.join(fig_save_path, "same_class_link_prob_search_figure.png"), facecolor="white", bbox_inches="tight")
     plt.close()
 
 
@@ -30,9 +30,9 @@ def collect_results(result):
 
 
 def run_experiment(save_path, args, process_idx):
-    print("Process {}, Experiment Index {}, Num Samples {}".format(os.getpid(), process_idx, args["num_samples"]))
+    print("Process {}, Experiment Index {}, Same Class Link Probability {}".format(os.getpid(), process_idx, args["same_class_link_prob"]))
 
-    expt_save_path = os.path.join(save_path, datetime.now().strftime('%Y-%m-%d-%H_%M_%S') + "_{}_{}".format(process_idx, args["num_samples"]))
+    expt_save_path = os.path.join(save_path, datetime.now().strftime('%Y-%m-%d-%H_%M_%S') + "_{}_{}".format(process_idx, args["same_class_link_prob"]))
     expt_grads_path = os.path.join(expt_save_path, "gradients")
     expt_activ_path = os.path.join(expt_save_path, "activations")
 
@@ -40,7 +40,7 @@ def run_experiment(save_path, args, process_idx):
         os.mkdir(expt_save_path)
         # os.system("touch {}".format(os.path.join(expt_save_path, "_details.txt")))
         logfile = open(os.path.join(expt_save_path, "_details.txt"), "w")
-        logfile.write("Training {} with num_samples {}\n\n".format(args["model_name"], args["num_samples"]))
+        logfile.write("Training {} with same_class_link_prob {}\n\n".format(args["model_name"], args["same_class_link_prob"]))
     if not os.path.exists(expt_grads_path):
         os.mkdir(expt_grads_path)
     if not os.path.exists(expt_activ_path):
@@ -57,7 +57,7 @@ def run_experiment(save_path, args, process_idx):
     logfile.write("Max train acc {}, max test acc {}\n".format(max_train_accuracy, max_test_accuracy))
 
     # Return tuple of results which can be sorted with other experiment process results and processed later
-    return (process_idx, (args["num_samples"], max_train_accuracy, "Train"), (args["num_samples"], max_test_accuracy, "Test"))
+    return (process_idx, (args["same_class_link_prob"], max_train_accuracy, "Train"), (args["same_class_link_prob"], max_test_accuracy, "Test"))
 
 
 def controller(save_path, args):
@@ -67,21 +67,24 @@ def controller(save_path, args):
 
     1. Dropout percentage
     2. Number of samples
-    3. Probability of linking heterogenous nodes
-    4. Learning rate
+    3. Noise standard deviation
+    4. Probability of linking heterogenous and homgenous nodes
+    5. Learning rate
     """
 
-    # Testing num_samples values:
+    # Testing noise_std values:
     # Define variables
     # dropout_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
-    num_sample_values = [20, 40, 100, 400, 800]
+    # num_sample_values = [20, 40, 100, 400, 800]
+    # noise_std_values = [0.0, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5]
+    same_class_link_probabilities = [0.8, 0.5, 0.25, 0.1, 0.05, 0.0]
 
     # Multiprocessing
     num_cpus = mp.cpu_count() - 4
     counter = 0
     with mp.Pool(processes=num_cpus) as pool:
-        for num_sample_val in num_sample_values:
-            args["num_samples"] = num_sample_val
+        for same_class_link_prob in same_class_link_probabilities:
+            args["same_class_link_prob"] = same_class_link_prob
             for _ in range(args["experiment_repeats"]):
                 pool.apply_async(
                     run_experiment, 
@@ -111,7 +114,7 @@ def controller(save_path, args):
         acc_type_list.append(result[2][2])
     
     df = pd.DataFrame({
-        "Num Samples Value": expt_val_list,
+        "Same Class Link Probability": expt_val_list,
         "Accuracy": expt_acc_list,
         "Accuracy Type": acc_type_list
     })
@@ -125,13 +128,13 @@ def main():
     ARGS = {
         "diff_class_link_prob": 0.05,
         "dropout": 0.0,
-        "epochs": 300,
+        "epochs": 200,
         "gradient_activ_save_freq": 50,
         "experiment_repeats": 15,
         "learning_rate": 0.01,
-        "model_name": "GCN",
-        "noise_std": 0.005,
-        "num_samples": 800,
+        "model_name": "AMPNet",
+        "noise_std": 0.3,
+        "num_samples": 400,
         "same_class_link_prob": 0.8,
     }
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]

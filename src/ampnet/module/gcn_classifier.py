@@ -65,8 +65,8 @@ class GCN(torch.nn.Module):
     def forward(self, data):
         x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
         edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
-        # x = self.sample_feats_and_mask(x.to("cpu"))
-        x = self.normalize_features_and_add_feature_embedding(x.to("cpu"))
+        # x = self.pca_feature_embedding_and_mask(x.to("cpu"))
+        x = self.normalize_features_and_add_feature_table_embedding(x.to("cpu"))
         # x = self.normalize_features(x.to("cpu"))
         x = x.to(self.device)
 
@@ -88,7 +88,7 @@ class GCN(torch.nn.Module):
         x_ = x_.requires_grad_(True)
         return x_
     
-    def normalize_features_and_add_feature_embedding(self, x):
+    def normalize_features_and_add_feature_table_embedding(self, x):
         # Use StandardScaler (z-scoring) to normalize two XOR features, transform to torch tensor
         scaler = StandardScaler()
         x_ = scaler.fit_transform(x.numpy())
@@ -108,7 +108,7 @@ class GCN(torch.nn.Module):
         node_vectors_rerolled = node_vectors_rerolled.requires_grad_(True)
         return node_vectors_rerolled
     
-    def sample_feats_and_mask(self, x):
+    def pca_feature_embedding_and_mask(self, x):
         assert self.emb_dim == self.feat_emb_dim + self.val_emb_dim, "feat and val emb dim must match self.emb_dim"
         pca = PCA(n_components=self.feat_emb_dim)
         scaler = StandardScaler()
@@ -156,7 +156,6 @@ class GCN(torch.nn.Module):
             node_vectors_rerolled = node_vectors_rolled_up
 
         node_vectors_rolled_up = node_vectors_rerolled.requires_grad_(True)
-        
         return node_vectors_rolled_up
 
     def visualize_gradients(self, save_path, epoch_idx, iter, color="C0"):
@@ -231,12 +230,11 @@ class GCN(torch.nn.Module):
         self.eval()
         with torch.no_grad():
             x, edge_index = data.x, data.edge_index  # x is [2708, 1433]
-            # edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
-            # x = self.sample_feats_and_mask(x.to("cpu"))
-            x = self.normalize_features_and_add_feature_embedding(x.to("cpu"))
+            # x = self.pca_feature_embedding_and_mask(x.to("cpu"))
+            x = self.normalize_features_and_add_feature_table_embedding(x.to("cpu"))
             # x = self.normalize_features(x.to("cpu"))
             x = x.to(self.device)
-            # activations["Embedded Feats"] = x.view(-1).cpu().numpy()
+            activations["Embedded Feats"] = x.view(-1).cpu().numpy()
 
             x = self.conv1(x, edge_index)
             activations["GCN Layer 1"] = x.view(-1).cpu().numpy()
