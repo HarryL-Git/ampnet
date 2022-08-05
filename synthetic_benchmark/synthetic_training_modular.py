@@ -15,6 +15,12 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
     model = get_model(args["model_name"], args["dropout"])
     model.to(device)
 
+    # Freeze all but last linear classifier layer
+    total_params = len(list(model.parameters()))
+    for counter, p in enumerate(model.parameters()):
+        if counter < total_params - 2:  # Last two parameters are the weight and bias of the linear layer
+            p.requires_grad = False
+
     # Define data
     train_data, test_data = get_xor_data(
         num_samples=args["num_samples"], 
@@ -44,8 +50,8 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         train_loss.backward()
         if epoch % args["gradient_activ_save_freq"] == 0:
             model.plot_grad_flow(grads_path, epoch, iter=0)
-            model.visualize_gradients(grads_path, epoch, iter=0)
-            model.visualize_activations(activ_path, train_data, epoch, iter=0)
+            # model.visualize_gradients(grads_path, epoch, iter=0)
+            # model.visualize_activations(activ_path, train_data, epoch, iter=0)
         optimizer.step()
 
         # Test

@@ -31,6 +31,10 @@ class AMPConv(torch_geometric.nn.MessagePassing):
 
         # Forward through Multihead attention blocks
         self.attn_output, self.attn_output_weights = self.multi_head_attention(x_i_reshape, x_j_reshape, x_j_reshape)
+        # x_j is source (target), K and V
+        # x_i is destination, Q
+
+        # Row index is feature index of destination
 
         output_reshape = torch.reshape(self.attn_output, (x_i.shape[0], x_i.shape[1]))
 

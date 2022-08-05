@@ -15,6 +15,12 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
     model = get_model(args["model_name"], args["dropout"])
     model.to(device)
 
+    # Freeze all but last linear classifier layer
+    total_params = len(list(model.parameters()))
+    for counter, p in enumerate(model.parameters()):
+        if counter < total_params - 2:  # Last two parameters are the weight and bias of the linear layer
+            p.requires_grad = False
+
     # Define data
     train_data, test_data = get_xor_data(
         num_samples=args["num_samples"], 
@@ -44,8 +50,8 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         train_loss.backward()
         if epoch % args["gradient_activ_save_freq"] == 0:
             model.plot_grad_flow(grads_path, epoch, iter=0)
-            model.visualize_gradients(grads_path, epoch, iter=0)
-            model.visualize_activations(activ_path, train_data, epoch, iter=0)
+            # model.visualize_gradients(grads_path, epoch, iter=0)
+            # model.visualize_activations(activ_path, train_data, epoch, iter=0)
         optimizer.step()
 
         # Test
@@ -100,9 +106,9 @@ if __name__ == "__main__":
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
-        "noise_std": 0.01,
+        "noise_std": 0.3,
         "num_samples": 400,
-        "same_class_link_prob": 0.8,
+        "same_class_link_prob": 0.1,
     }
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
