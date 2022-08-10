@@ -23,6 +23,9 @@ class AMPConv(torch_geometric.nn.MessagePassing):
         return out
 
     def message(self, x_i, x_j):
+        """
+        Pass messages from nodes x_j to nodes x_i.
+        """
         if x_i.shape[1] % self.embed_dim != 0:
             print("Error, invalid configuration")
 
@@ -30,11 +33,15 @@ class AMPConv(torch_geometric.nn.MessagePassing):
         x_j_reshape = torch.reshape(x_j, (x_j.shape[0], int(x_j.shape[1] / self.embed_dim), self.embed_dim))
 
         # Forward through Multihead attention blocks
-        self.attn_output, self.attn_output_weights = self.multi_head_attention(x_i_reshape, x_j_reshape, x_j_reshape)
-        # x_j is source (target), K and V
-        # x_i is destination, Q
+        self.attn_output, self.attn_output_weights = self.multi_head_attention(query=x_i_reshape, key=x_j_reshape, value=x_j_reshape)
+        # x_i is destination node, passed in as query (target sequence)
+        # x_j is source node, passed in as key and value (source sequence)
 
-        # Row index is feature index of destination
+        # attn_output_weights is shape (batch_size, target_sequence_len, source_seq_len)
+        # --> row index is feature index of destination node
+        # --> col index is feature index of source node
+        # --> row sums up to one, because feature in destination node is contextualized 
+        # by a linear combo with attention weights of source node features
 
         output_reshape = torch.reshape(self.attn_output, (x_i.shape[0], x_i.shape[1]))
 

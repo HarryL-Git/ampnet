@@ -18,7 +18,7 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
     # Freeze all but last linear classifier layer
     total_params = len(list(model.parameters()))
     for counter, p in enumerate(model.parameters()):
-        if counter < total_params - 2:  # Last two parameters are the weight and bias of the linear layer
+        if counter < total_params - 2 and counter > 0:  # Last two parameters are the weight and bias of the linear layer
             p.requires_grad = False
 
     # Define data
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
         os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-        os.system("cp ./synthetic_benchmark/synthetic_training_modular.py {}/".format(SAVE_PATH))
+        os.system("cp ./synthetic_benchmark/ampnet_freeze_check.py {}/".format(SAVE_PATH))
     if not os.path.exists(GRADS_PATH):
         os.mkdir(GRADS_PATH)
     if not os.path.exists(ACTIV_PATH):

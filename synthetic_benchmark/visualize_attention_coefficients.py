@@ -1,5 +1,6 @@
 import os
 import torch
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,49 +14,82 @@ def plot_attn_weights(edge_attn_weights_matrix, graph_data, fig_save_path):
     It accepts a matrix of edge attention weight, and plots (for now) four distribution
     plots
 
-    for idx in range(graph_data.edge_index.shape[1])
+    # edge_attn_weights_matrix is shape (batch_size, target_sequence_len, source_seq_len)
+        # --> row index is feature index of destination node
+        # --> col index is feature index of source node
+        # --> row sums up to one, because feature in destination node is contextualized 
+        # by a linear combo with attention weights of source node features
+    # Interpretation: attn_matr[idx, row, col] = how much does feature row_idx in destination
+    # node listen to feature col_idx in source node
 
     Args:
     - edge_attn_weights_matrix: matrix of size [num_edges, 2, 2]
     """
     # Get lists of edge indices for homogenous and heterogenous edges
-    homog_edge_indices = []
-    heterog_edge_indices = []
-    for idx in range(graph_data.edge_index.shape[1]):
-        if graph_data.y[graph_data.edge_index[0,idx]] == graph_data.y[graph_data.edge_index[1,idx]]:
-            homog_edge_indices.append(idx)
+    cutoffs = list(range(0, graph_data.x.shape[0], graph_data.x.shape[0] // 4))
+    df_dict = {
+        "XOR_00-00": [],
+        "XOR_00-01": [],
+        "XOR_00-10": [],
+        "XOR_00-11": [],
+        "XOR_01-00": [],
+        "XOR_01-01": [],
+        "XOR_01-10": [],
+        "XOR_01-11": [],
+        "XOR_10-00": [],
+        "XOR_10-01": [],
+        "XOR_10-10": [],
+        "XOR_10-11": [],
+        "XOR_11-00": [],
+        "XOR_11-01": [],
+        "XOR_11-10": [],
+        "XOR_11-11": [],
+    }
+    for edge_idx in range(graph_data.edge_index.shape[1]):
+        edge_connection_str = "XOR_"
+        if graph_data.edge_index[0,edge_idx] < cutoffs[1]:
+            edge_connection_str += "00"
+        elif graph_data.edge_index[0,edge_idx] >= cutoffs[1] and graph_data.edge_index[0,edge_idx] < cutoffs[2]:
+            edge_connection_str += "01"
+        elif graph_data.edge_index[0,edge_idx] >= cutoffs[2] and graph_data.edge_index[0,edge_idx] < cutoffs[3]:
+            edge_connection_str += "10"
+        elif graph_data.edge_index[0,edge_idx] >= cutoffs[3]:
+            edge_connection_str += "11"
         else:
-            heterog_edge_indices.append(idx)
+            raise Exception("Unknown origin XOR node")
+        
+        edge_connection_str += "-"
 
-    homog_visual_df = pd.DataFrame({
-        "Feat 1 - Feat 1 Coefficients": edge_attn_weights_matrix[homog_edge_indices,0,0],
-        "Feat 1 - Feat 2 Coefficients": edge_attn_weights_matrix[homog_edge_indices,0,1],
-        "Feat 2 - Feat 1 Coefficients": edge_attn_weights_matrix[homog_edge_indices,1,0],
-        "Feat 2 - Feat 2 Coefficients": edge_attn_weights_matrix[homog_edge_indices,1,1]
-    })
-    homog_visual_df_melted = pd.melt(homog_visual_df, var_name="Relationship")
+        if graph_data.edge_index[1,edge_idx] < cutoffs[1]:
+            edge_connection_str += "00"
+        elif graph_data.edge_index[1,edge_idx] >= cutoffs[1] and graph_data.edge_index[1,edge_idx] < cutoffs[2]:
+            edge_connection_str += "01"
+        elif graph_data.edge_index[1,edge_idx] >= cutoffs[2] and graph_data.edge_index[1,edge_idx] < cutoffs[3]:
+            edge_connection_str += "10"
+        elif graph_data.edge_index[1,edge_idx] >= cutoffs[3]:
+            edge_connection_str += "11"
+        else:
+            raise Exception("Unknown destination XOR node")
+        
+        df_dict[edge_connection_str].append(edge_idx)
+    
+    for key in list(df_dict.keys()):
+        edge_coeffs_df = pd.DataFrame({
+            "Dst Feat 1 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],0,0],
+            "Dst Feat 1 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],0,1],
+            "Dst Feat 2 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],1,0],
+            "Dst Feat 2 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],1,1]
+        })
+        edge_coeffs_df_melted = pd.melt(edge_coeffs_df, var_name="Relationship")
 
-    heterog_visual_df = pd.DataFrame({
-        "Feat 1 - Feat 1 Coefficients": edge_attn_weights_matrix[heterog_edge_indices,0,0],
-        "Feat 1 - Feat 2 Coefficients": edge_attn_weights_matrix[heterog_edge_indices,0,1],
-        "Feat 2 - Feat 1 Coefficients": edge_attn_weights_matrix[heterog_edge_indices,1,0],
-        "Feat 2 - Feat 2 Coefficients": edge_attn_weights_matrix[heterog_edge_indices,1,1]
-    })
-    heterog_visual_df_melted = pd.melt(heterog_visual_df, var_name="Relationship")
-
-    sns.set_theme()
-    g = sns.FacetGrid(homog_visual_df_melted, col="Relationship", col_wrap=2, sharex=True, height=4)
-    g.map(plt.hist, "value", alpha=.4)
-    g.set_ylabels('Count')
-    plt.savefig(os.path.join(fig_save_path, "homogenous_edge_attn_coeff_grid.png"), bbox_inches="tight", facecolor="white")
-    plt.close()
-
-    sns.set_theme()
-    g = sns.FacetGrid(heterog_visual_df_melted, col="Relationship", col_wrap=2, sharex=True, height=4)
-    g.map(plt.hist, "value", alpha=.4)
-    g.set_ylabels('Count')
-    plt.savefig(os.path.join(fig_save_path, "heterogenous_edge_attn_coeff_grid.png"), bbox_inches="tight", facecolor="white")
-    plt.close()
+        sns.set_theme()
+        g = sns.FacetGrid(edge_coeffs_df_melted, col="Relationship", col_wrap=2, sharex=True, sharey=True, height=4)
+        g.map(plt.hist, "value", alpha=.4, bins=np.arange(0.0, 1.05, 0.05))
+        g.set_ylabels('Count')
+        g.fig.subplots_adjust(top=0.9)
+        g.fig.suptitle(key)
+        plt.savefig(os.path.join(fig_save_path, "{}_attn_coeff_grid.png".format(key)), bbox_inches="tight", facecolor="white")
+        plt.close()
 
 
 def visualize_attention_coefficients(args, save_path):
@@ -75,7 +109,6 @@ def visualize_attention_coefficients(args, save_path):
 
     _ = model(train_data)
     print(model.conv1.attn_output_weights.shape)
-    print(model.conv2.attn_output_weights.shape)
 
     plot_attn_weights(
         edge_attn_weights_matrix=model.conv1.attn_output_weights.detach().numpy(), 
@@ -90,14 +123,14 @@ def main():
         "diff_class_link_prob": 0.05,
         "dropout": 0.0,
         "epochs": 200,
-        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-02-12_17_34_search",
-        "experiment_load_name": "2022-08-02-12_20_45_7_0.8",
+        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-07-13_40_38_search",
+        "experiment_load_name": "2022-08-07-13_45_06_20_0.5",
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
         "noise_std": 0.3,
         "num_samples": 400,
-        "same_class_link_prob": 0.1,
+        "same_class_link_prob": 0.5,
     }
     assert args["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 

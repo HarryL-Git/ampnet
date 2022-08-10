@@ -16,10 +16,10 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
     model.to(device)
 
     # Freeze all but last linear classifier layer
-    total_params = len(list(model.parameters()))
-    for counter, p in enumerate(model.parameters()):
-        if counter < total_params - 2:  # Last two parameters are the weight and bias of the linear layer
-            p.requires_grad = False
+    # total_params = len(list(model.parameters()))
+    # for counter, p in enumerate(model.parameters()):
+    #     if counter < total_params - 2:  # Last two parameters are the weight and bias of the linear layer
+    #         p.requires_grad = False
 
     # Define data
     train_data, test_data = get_xor_data(

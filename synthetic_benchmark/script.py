@@ -31,3 +31,21 @@ incoming_edge_attentions.shape
 incoming_edge_attentions[0,:,:]
 graph_data.x[incoming_node_indices[0]]
 """
+
+
+"""
+from mpl_toolkits import mplot3d
+import numpy as np
+import matplotlib.pyplot as plt
+
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+
+classes = [0, 1]
+scatter = ax.scatter3D(x[:,0].detach().numpy(), x[:,1].detach().numpy(), x[:,2].detach().numpy(), c=data.y, cmap="winter")
+ax.set_xlabel("Dimension 1")
+ax.set_ylabel("Dimension 2")
+ax.set_zlabel("Dimension 3")
+ax.set_title("Separation of Average-Pooled Vectors")
+plt.legend(handles=scatter.legend_elements()[0], labels=classes)
+"""

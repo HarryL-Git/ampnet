@@ -133,14 +133,14 @@ def main():
         "experiment_repeats": 15,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
-        "noise_std": 0.01,
+        "noise_std": 0.3,
         "num_samples": 400,
         "same_class_link_prob": 0.8,
     }
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
     # Create save paths
-    save_path = "./synthetic_benchmark/runs_{}".format(ARGS["model_name"] + "_freeze_check")
+    save_path = "./synthetic_benchmark/runs_{}".format(ARGS["model_name"])
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     
