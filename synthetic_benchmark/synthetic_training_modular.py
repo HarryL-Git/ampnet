@@ -5,7 +5,7 @@ import datetime
 import torch
 import torch.nn as nn
 from src.ampnet.utils.utils import *
-from synthetic_benchmark.xor_training_utils import get_xor_data, get_model
+from synthetic_benchmark.xor_training_utils import get_xor_data, get_duplicated_xor_data, get_model
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -22,12 +22,22 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
     #         p.requires_grad = False
 
     # Define data
-    train_data, test_data = get_xor_data(
-        num_samples=args["num_samples"], 
-        noise_std=args["noise_std"], 
-        same_class_link_prob=args["same_class_link_prob"], 
-        diff_class_link_prob=args["diff_class_link_prob"], 
-        save_path=save_path)
+    if not args["use_duplicated_xor_features"]:
+        train_data, test_data = get_xor_data(
+            num_samples=args["num_samples"], 
+            noise_std=args["noise_std"], 
+            same_class_link_prob=args["same_class_link_prob"], 
+            diff_class_link_prob=args["diff_class_link_prob"], 
+            save_path=save_path)
+    else:
+        train_data, test_data = get_duplicated_xor_data(
+            num_samples=args["num_samples"], 
+            same_class_link_prob=args["same_class_link_prob"], 
+            diff_class_link_prob=args["diff_class_link_prob"], 
+            feature_repeats=5,
+            dropout_rate=0.0,
+            save_path=save_path,
+        )
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"], weight_decay=5e-4)
     criterion = nn.NLLLoss()
@@ -106,9 +116,10 @@ if __name__ == "__main__":
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
-        "noise_std": 0.005,
+        "noise_std": 0.1,
         "num_samples": 400,
         "same_class_link_prob": 0.8,
+        "use_duplicated_xor_features": True,
     }
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 

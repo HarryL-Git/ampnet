@@ -31,7 +31,8 @@ class AMPGCN(torch.nn.Module):
                 downsample_feature_vectors=True,
                 average_pooling_flag=True,
                 dropout_rate=0.1,
-                dropout_adj_rate=0.1):
+                dropout_adj_rate=0.1,
+                feature_repeats=5):
         super().__init__()
         assert embedding_dim == feat_emb_dim + val_emb_dim, "Feature and value dimensions do not add up to total embedding dimension"
 
@@ -49,10 +50,11 @@ class AMPGCN(torch.nn.Module):
         self.average_pooling_flag = average_pooling_flag
         self.dropout_rate = dropout_rate
         self.dropout_adj_rate = dropout_adj_rate
+        self.feature_repeats = feature_repeats
 
         # num_flattened_features = self.num_sampled_vectors * self.emb_dim if downsample_feature_vectors else dataset.num_node_features * self.emb_dim
         self.feature_embedding_table = nn.Embedding(
-            num_embeddings=num_node_features,
+            num_embeddings=num_node_features // feature_repeats,  # 2 features repeated 5 times
             embedding_dim=feat_emb_dim
         )
         # self.mask_token = nn.Parameter(torch.zeros(1, embedding_dim))
@@ -138,7 +140,9 @@ class AMPGCN(torch.nn.Module):
             # Add feature embedding from table to each feature in each node
             node_vectors_unrolled = []
             for node_idx in range(x.shape[0]):
-                x_embed = torch.cat((self.feature_embedding_table.weight, x_[node_idx].unsqueeze(-1)), dim=1)
+                x_embed = torch.cat((
+                    torch.tile(self.feature_embedding_table.weight, [self.feature_repeats, 1]), 
+                    x_[node_idx].unsqueeze(-1)), dim=1)
                 node_vectors_unrolled.append(x_embed.unsqueeze(dim=0))
             
             # Concatenate and reshape into flatten node flattened embeddings

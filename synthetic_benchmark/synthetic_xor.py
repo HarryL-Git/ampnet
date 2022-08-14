@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-
+import torch.nn.functional as F
 
 """
 XOR Rules
@@ -20,18 +20,75 @@ Notes:
 """
 
 
-def create_sparse_redundant_xor_data(
+def create_duplicated_xor_data(
     num_samples: int, 
-    noise_std: float=0.1, 
     same_class_link_prob: float=0.7, 
     diff_class_link_prob: float=0.1,
-    dropout_rate: float=0.8):
+    feature_repeats: int=5,
+    dropout_rate: float=0.0):
     """
-    Idea for making XOR feature dataset sparse and redundant:
-    1. Duplicate two XOR features many times (redudancy)
-    2. Apply high-percentage dropout (sparsity)
+    This function creates XOR function features with duplicate features and optionally sparse features 
+    using dropout, to make the XOR task more challenging
+
+    Arguments:
+    - num_samples:  Number of nodes to create, must be a number divisible by 4 (to balance XOR samples)
+    - noise_std:    Standard deviation of noise that will be added to node features to make them "fuzzy"
+    - same_class_link_prob:     Probability of linking nodes of the same class
+    - diff_class_link_prob:     Probability of linking nodes of different classes
+    - feature_repeats:  number of times to duplicate the two XOR features
+    - dropout_rate:     dropout rate to use to make XOR duplicated features sparse
+
+    Returns:
+    - x: matrix of node features, shape [num_samples, 2]
+    - labels: vector of corresponding labels, shape [num_samples,]
     """
-    pass
+    # Input validation
+    assert num_samples % 4 == 0, "num_samples must be an integer divisible by 4."
+    assert same_class_link_prob < 1. and same_class_link_prob >= 0., "same_class_link_prob must be a float percent between 0 and 1."
+    assert diff_class_link_prob < 1. and diff_class_link_prob >= 0., "diff_class_link_prob must be a float percent between 0 and 1."
+    repeats = num_samples // 4
+
+    # Create node features
+    x = np.array([[0,0], [0,1], [1,0], [1,1]])
+    y = np.array([0.,1.,1.,0.])
+    x = np.repeat(x, [repeats, repeats, repeats, repeats], axis=0)
+    x = np.tile(x, [1, feature_repeats])  # Duplicate features
+    y = np.repeat(y, [repeats, repeats, repeats, repeats], axis=0)
+    x_t = torch.tensor(x, dtype=torch.float32)
+    x_t = F.dropout(x_t, p=dropout_rate, training=True)  # Dropout with given probability
+
+    noise_std_steps = np.arange(0.05, 0.55, 0.5 / feature_repeats)
+    for idx, noise_std_step in enumerate(noise_std_steps):
+        noise_matrix = np.random.normal(loc=0.0, scale=noise_std_step, size=(x.shape[0], x.shape[1] // feature_repeats))
+        noise_matrix_t = torch.tensor(noise_matrix, dtype=torch.float32)
+        x_t[:, idx*2:idx*2+2] += noise_matrix_t  # Add small noise to differentiate repeats of 4 orignal samples
+
+    # Create binary adjacency matrix
+    adj_matrix = np.zeros(shape=(num_samples, num_samples), dtype=np.uint8)
+    for row in range(num_samples):
+        for col in range(num_samples):
+            if row == col:
+                pass  # No Self Loops
+            elif y[row] == y[col]:
+                if random.random() < same_class_link_prob:
+                    adj_matrix[row,col] = 1
+            elif y[row] != y[col]:
+                if random.random() < diff_class_link_prob:
+                    adj_matrix[row,col] = 1
+            else:
+                raise Exception("Unknown XOR sample")
+
+    # Create PyG edge index tensor shape [2, num_edges] from adjacency matrix
+    source_idx_list = []
+    dest_idx_list = []
+    for row in range(len(adj_matrix)):
+        for col in range(len(adj_matrix[row])):
+            if adj_matrix[row][col] > 0:
+                source_idx_list.append(row)
+                dest_idx_list.append(col)
+    
+    edge_idx_arr = np.array([source_idx_list, dest_idx_list])
+    return x_t, torch.tensor(y, dtype=torch.float32), torch.from_numpy(adj_matrix), torch.LongTensor(edge_idx_arr)
 
 
 def create_xor_data(
@@ -132,7 +189,14 @@ def plot_graph(adj_matrix, labels):
 
 if __name__ == "__main__":
     # For debugging purposes
-    x, y, adj_matrix, edge_idx_arr = create_xor_data(num_samples=20, noise_std=0.3, same_class_link_prob=0.7, diff_class_link_prob=0.1)
+    # x, y, adj_matrix, edge_idx_arr = create_xor_data(num_samples=20, noise_std=0.3, same_class_link_prob=0.7, diff_class_link_prob=0.1)
+    x, y, adj_matrix, edge_idx_arr = create_duplicated_xor_data(
+        num_samples=40, 
+        same_class_link_prob=0.8, 
+        diff_class_link_prob=0.05, 
+        feature_repeats=5, 
+        dropout_rate=0.0
+    )
     print("Node features:\n", x, "\n")
     print("Labels:\n", y, "\n")
     print("Adjacency Matrix:\n", adj_matrix, "\n")

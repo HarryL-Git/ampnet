@@ -4,7 +4,7 @@ from src.ampnet.module.gcn_one_layer import GCNOneLayer
 from src.ampnet.module.amp_gcn import AMPGCN
 from src.ampnet.module.linear_layer import LinearLayer
 from src.ampnet.module.two_layer_sigmoid_mlp import TwoLayerSigmoid
-from synthetic_benchmark.synthetic_xor import create_xor_data, plot_node_features
+from synthetic_benchmark.synthetic_xor import create_xor_data, create_duplicated_xor_data, plot_node_features
 
 
 def get_xor_data(num_samples, noise_std, same_class_link_prob, diff_class_link_prob, save_path):
@@ -12,7 +12,8 @@ def get_xor_data(num_samples, noise_std, same_class_link_prob, diff_class_link_p
         num_samples=num_samples, 
         noise_std=noise_std, 
         same_class_link_prob=same_class_link_prob, 
-        diff_class_link_prob=diff_class_link_prob)
+        diff_class_link_prob=diff_class_link_prob
+    )
     train_data = Data(x=x, edge_index=edge_idx_arr, y=y)
     plot_node_features(x, y, save_path, "xor_train_node_features.png")
 
@@ -21,9 +22,35 @@ def get_xor_data(num_samples, noise_std, same_class_link_prob, diff_class_link_p
         num_samples=num_samples, 
         noise_std=noise_std, 
         same_class_link_prob=same_class_link_prob, 
-        diff_class_link_prob=diff_class_link_prob)
+        diff_class_link_prob=diff_class_link_prob
+    )
     test_data = Data(x=x, edge_index=edge_idx_arr, y=y)
     plot_node_features(x, y, save_path, "xor_test_node_features.png")
+
+    return train_data, test_data
+
+
+def get_duplicated_xor_data(num_samples, same_class_link_prob, diff_class_link_prob, feature_repeats, dropout_rate, save_path):
+    x, y, adj_matrix, edge_idx_arr = create_duplicated_xor_data(
+        num_samples=num_samples, 
+        same_class_link_prob=same_class_link_prob, 
+        diff_class_link_prob=diff_class_link_prob,
+        feature_repeats=feature_repeats,
+        dropout_rate=dropout_rate
+    )
+    train_data = Data(x=x, edge_index=edge_idx_arr, y=y)
+    plot_node_features(x[:,0:2], y, save_path, "xor_train_first_two_features.png")
+
+    # Fixed number of test samples
+    x, y, adj_matrix, edge_idx_arr = create_duplicated_xor_data(
+        num_samples=num_samples, 
+        same_class_link_prob=same_class_link_prob, 
+        diff_class_link_prob=diff_class_link_prob,
+        feature_repeats=feature_repeats,
+        dropout_rate=dropout_rate
+    )
+    test_data = Data(x=x, edge_index=edge_idx_arr, y=y)
+    plot_node_features(x[:,0:2], y, save_path, "xor_test_first_two_features.png")
 
     return train_data, test_data
 
@@ -34,8 +61,8 @@ def get_model(model_name, dropout):
             device="cpu", 
             embedding_dim=3, 
             num_heads=1,
-            num_node_features=2, 
-            num_sampled_vectors=2,
+            num_node_features=10, 
+            num_sampled_vectors=10,
             output_dim=2, 
             softmax_out=True, 
             feat_emb_dim=2, 

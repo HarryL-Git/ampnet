@@ -30,7 +30,7 @@ def collect_results(result):
 
 
 def run_experiment(save_path, args, process_idx):
-    print("Process {}, Experiment Index {}, Same Class Link Probability {}".format(os.getpid(), process_idx, args["same_class_link_prob"]))
+    print("Process {}, Experiment Index {}, Noise STD {}".format(os.getpid(), process_idx, args["same_class_link_prob"]))
 
     expt_save_path = os.path.join(save_path, datetime.now().strftime('%Y-%m-%d-%H_%M_%S') + "_{}_{}".format(process_idx, args["same_class_link_prob"]))
     expt_grads_path = os.path.join(expt_save_path, "gradients")
@@ -72,11 +72,10 @@ def controller(save_path, args):
     5. Learning rate
     """
 
-    # Testing noise_std values:
     # Define variables
     # dropout_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
     # num_sample_values = [20, 40, 100, 400, 800]
-    # noise_std_values = [0.0, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5]
+    # noise_std_values = [0.0, 0.01, 0.05, 0.1, 0.25, 0.5]
     same_class_link_probabilities = [0.8, 0.5, 0.25, 0.1, 0.05, 0.0]
 
     # Multiprocessing
@@ -130,12 +129,13 @@ def main():
         "dropout": 0.0,
         "epochs": 200,
         "gradient_activ_save_freq": 50,
-        "experiment_repeats": 15,
+        "experiment_repeats": 10,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
-        "noise_std": 0.3,
+        "noise_std": -1,  # Set for each feature repeat in 10-feature task
         "num_samples": 400,
-        "same_class_link_prob": 0.8,
+        "same_class_link_prob": 0.5,
+        "use_duplicated_xor_features": True,
     }
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 

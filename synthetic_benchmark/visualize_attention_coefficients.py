@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from synthetic_benchmark.xor_training_utils import get_xor_data, get_model
+from synthetic_benchmark.xor_training_utils import get_xor_data, get_duplicated_xor_data, get_model
 
 
 def plot_attn_weights(edge_attn_weights_matrix, graph_data, fig_save_path):
@@ -100,12 +100,22 @@ def visualize_attention_coefficients(args, save_path):
     model.eval()
 
     # Define data
-    train_data, test_data = get_xor_data(
-        num_samples=args["num_samples"], 
-        noise_std=args["noise_std"], 
-        same_class_link_prob=args["same_class_link_prob"], 
-        diff_class_link_prob=args["diff_class_link_prob"], 
-        save_path=save_path)
+    if not args["use_duplicated_xor_features"]:
+        train_data, test_data = get_xor_data(
+            num_samples=args["num_samples"], 
+            noise_std=args["noise_std"], 
+            same_class_link_prob=args["same_class_link_prob"], 
+            diff_class_link_prob=args["diff_class_link_prob"], 
+            save_path=save_path)
+    else:
+        train_data, test_data = get_duplicated_xor_data(
+            num_samples=args["num_samples"], 
+            same_class_link_prob=args["same_class_link_prob"], 
+            diff_class_link_prob=args["diff_class_link_prob"], 
+            feature_repeats=5,
+            dropout_rate=0.0,
+            save_path=save_path,
+        )
 
     _ = model(train_data)
     print(model.conv1.attn_output_weights.shape)
@@ -123,14 +133,15 @@ def main():
         "diff_class_link_prob": 0.05,
         "dropout": 0.0,
         "epochs": 200,
-        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-07-13_40_38_search",
-        "experiment_load_name": "2022-08-07-13_45_06_20_0.5",
+        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-10-23_03_36_search",
+        "experiment_load_name": "2022-08-10-23_30_14_42_0.25",
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
-        "noise_std": 0.3,
+        "noise_std": -1,
         "num_samples": 400,
         "same_class_link_prob": 0.5,
+        "use_duplicated_xor_features": True,
     }
     assert args["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
