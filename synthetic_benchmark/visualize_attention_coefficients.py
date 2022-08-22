@@ -74,6 +74,8 @@ def plot_attn_weights(edge_attn_weights_matrix, graph_data, fig_save_path):
         df_dict[edge_connection_str].append(edge_idx)
     
     for key in list(df_dict.keys()):
+        if len(df_dict[key]) == 0:
+            continue
         edge_coeffs_df = pd.DataFrame({
             "Dst Feat 1 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],0,0],
             "Dst Feat 1 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],0,1],
@@ -110,10 +112,9 @@ def visualize_attention_coefficients(args, save_path):
     else:
         train_data, test_data = get_duplicated_xor_data(
             num_samples=args["num_samples"], 
-            same_class_link_prob=args["same_class_link_prob"], 
-            diff_class_link_prob=args["diff_class_link_prob"], 
-            feature_repeats=5,
-            dropout_rate=0.0,
+            noise_std=args["noise_std"], 
+            num_nearest_neighbors=args["num_nearest_neighbors"],
+            feature_repeats=args["feature_repeats"],
             save_path=save_path,
         )
 
@@ -130,17 +131,19 @@ def visualize_attention_coefficients(args, save_path):
 def main():
     # Arguments
     args = {
-        "diff_class_link_prob": 0.05,
+        # "diff_class_link_prob": 0.05,
         "dropout": 0.0,
         "epochs": 200,
-        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-10-23_03_36_search",
-        "experiment_load_name": "2022-08-10-23_30_14_42_0.25",
+        "feature_repeats": 1,
+        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-16-17_29_31_search",
+        "experiment_load_name": "2022-08-16-17_38_50_113_0.6",
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
-        "noise_std": -1,
+        "noise_std": 0.4,
+        "num_nearest_neighbors": 10,
         "num_samples": 400,
-        "same_class_link_prob": 0.5,
+        # "same_class_link_prob": 0.5,
         "use_duplicated_xor_features": True,
     }
     assert args["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]

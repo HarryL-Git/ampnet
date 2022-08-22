@@ -30,13 +30,12 @@ def get_xor_data(num_samples, noise_std, same_class_link_prob, diff_class_link_p
     return train_data, test_data
 
 
-def get_duplicated_xor_data(num_samples, same_class_link_prob, diff_class_link_prob, feature_repeats, dropout_rate, save_path):
+def get_duplicated_xor_data(num_samples, noise_std, num_nearest_neighbors, feature_repeats, save_path):
     x, y, adj_matrix, edge_idx_arr = create_duplicated_xor_data(
         num_samples=num_samples, 
-        same_class_link_prob=same_class_link_prob, 
-        diff_class_link_prob=diff_class_link_prob,
-        feature_repeats=feature_repeats,
-        dropout_rate=dropout_rate
+        noise_std=noise_std, 
+        num_nearest_neighbors=num_nearest_neighbors,
+        feature_repeats=feature_repeats
     )
     train_data = Data(x=x, edge_index=edge_idx_arr, y=y)
     plot_node_features(x[:,0:2], y, save_path, "xor_train_first_two_features.png")
@@ -44,10 +43,9 @@ def get_duplicated_xor_data(num_samples, same_class_link_prob, diff_class_link_p
     # Fixed number of test samples
     x, y, adj_matrix, edge_idx_arr = create_duplicated_xor_data(
         num_samples=num_samples, 
-        same_class_link_prob=same_class_link_prob, 
-        diff_class_link_prob=diff_class_link_prob,
-        feature_repeats=feature_repeats,
-        dropout_rate=dropout_rate
+        noise_std=noise_std, 
+        num_nearest_neighbors=num_nearest_neighbors,
+        feature_repeats=feature_repeats
     )
     test_data = Data(x=x, edge_index=edge_idx_arr, y=y)
     plot_node_features(x[:,0:2], y, save_path, "xor_test_first_two_features.png")
@@ -70,7 +68,8 @@ def get_model(model_name, dropout):
             downsample_feature_vectors=False,
             average_pooling_flag=True,
             dropout_rate=dropout,
-            dropout_adj_rate=dropout)
+            dropout_adj_rate=dropout,
+            feature_repeats=5)
     elif model_name == "GCN":
         model = GCN(
             num_node_features=2, 

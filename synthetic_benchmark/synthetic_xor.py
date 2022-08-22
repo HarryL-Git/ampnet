@@ -5,6 +5,7 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
+from sklearn.neighbors import NearestNeighbors
 
 """
 XOR Rules
@@ -22,10 +23,9 @@ Notes:
 
 def create_duplicated_xor_data(
     num_samples: int, 
-    same_class_link_prob: float=0.7, 
-    diff_class_link_prob: float=0.1,
-    feature_repeats: int=5,
-    dropout_rate: float=0.0):
+    noise_std: float=0.1,
+    num_nearest_neighbors: int=10,
+    feature_repeats: int=5,):
     """
     This function creates XOR function features with duplicate features and optionally sparse features 
     using dropout, to make the XOR task more challenging
@@ -44,39 +44,48 @@ def create_duplicated_xor_data(
     """
     # Input validation
     assert num_samples % 4 == 0, "num_samples must be an integer divisible by 4."
-    assert same_class_link_prob < 1. and same_class_link_prob >= 0., "same_class_link_prob must be a float percent between 0 and 1."
-    assert diff_class_link_prob < 1. and diff_class_link_prob >= 0., "diff_class_link_prob must be a float percent between 0 and 1."
+    # assert same_class_link_prob < 1. and same_class_link_prob >= 0., "same_class_link_prob must be a float percent between 0 and 1."
+    # assert diff_class_link_prob < 1. and diff_class_link_prob >= 0., "diff_class_link_prob must be a float percent between 0 and 1."
     repeats = num_samples // 4
 
     # Create node features
-    x = np.array([[0,0], [0,1], [1,0], [1,1]])
+    x = np.array([[0,0], [0,1], [1,0], [1,1]], dtype=np.float64)
     y = np.array([0.,1.,1.,0.])
     x = np.repeat(x, [repeats, repeats, repeats, repeats], axis=0)
     x = np.tile(x, [1, feature_repeats])  # Duplicate features
     y = np.repeat(y, [repeats, repeats, repeats, repeats], axis=0)
-    x_t = torch.tensor(x, dtype=torch.float32)
-    x_t = F.dropout(x_t, p=dropout_rate, training=True)  # Dropout with given probability
+    # x_t = F.dropout(x_t, p=dropout_rate, training=True)  # Dropout with given probability
 
-    noise_std_steps = np.arange(0.05, 0.55, 0.5 / feature_repeats)
-    for idx, noise_std_step in enumerate(noise_std_steps):
-        noise_matrix = np.random.normal(loc=0.0, scale=noise_std_step, size=(x.shape[0], x.shape[1] // feature_repeats))
-        noise_matrix_t = torch.tensor(noise_matrix, dtype=torch.float32)
-        x_t[:, idx*2:idx*2+2] += noise_matrix_t  # Add small noise to differentiate repeats of 4 orignal samples
+    noise_matrix = np.random.normal(loc=0.0, scale=noise_std, size=(x.shape[0], x.shape[1]))
+    x += noise_matrix
+
+    # Uncomment to add noise with different std to each feature duplicate
+    # noise_std_steps = np.arange(0.05, 0.55, 0.5 / feature_repeats)
+    # for idx, noise_std_step in enumerate(noise_std_steps):
+    #     noise_matrix = np.random.normal(loc=0.0, scale=noise_std_step, size=(x.shape[0], x.shape[1] // feature_repeats))
+    #     noise_matrix_t = torch.tensor(noise_matrix, dtype=torch.float32)
+    #     x_t[:, idx*2:idx*2+2] += noise_matrix_t  # Add small noise to differentiate repeats of 4 orignal samples
+
+    nbrs = NearestNeighbors(n_neighbors=num_nearest_neighbors + 1, algorithm='ball_tree', metric='minkowski').fit(x)
+    distances, indices = nbrs.kneighbors(x)
 
     # Create binary adjacency matrix
     adj_matrix = np.zeros(shape=(num_samples, num_samples), dtype=np.uint8)
-    for row in range(num_samples):
-        for col in range(num_samples):
-            if row == col:
-                pass  # No Self Loops
-            elif y[row] == y[col]:
-                if random.random() < same_class_link_prob:
-                    adj_matrix[row,col] = 1
-            elif y[row] != y[col]:
-                if random.random() < diff_class_link_prob:
-                    adj_matrix[row,col] = 1
-            else:
-                raise Exception("Unknown XOR sample")
+    for row in range(indices.shape[0]):
+        for col in range(1, indices.shape[1]):
+            adj_matrix[row,indices[row,col]] = 1
+    # for row in range(num_samples):
+    #     for col in range(num_samples):
+    #         if row == col:
+    #             pass  # No Self Loops
+    #         elif y[row] == y[col]:
+    #             if random.random() < same_class_link_prob:
+    #                 adj_matrix[row,col] = 1
+    #         elif y[row] != y[col]:
+    #             if random.random() < diff_class_link_prob:
+    #                 adj_matrix[row,col] = 1
+    #         else:
+    #             raise Exception("Unknown XOR sample")
 
     # Create PyG edge index tensor shape [2, num_edges] from adjacency matrix
     source_idx_list = []
@@ -88,6 +97,7 @@ def create_duplicated_xor_data(
                 dest_idx_list.append(col)
     
     edge_idx_arr = np.array([source_idx_list, dest_idx_list])
+    x_t = torch.tensor(x, dtype=torch.float32)
     return x_t, torch.tensor(y, dtype=torch.float32), torch.from_numpy(adj_matrix), torch.LongTensor(edge_idx_arr)
 
 
@@ -192,10 +202,11 @@ if __name__ == "__main__":
     # x, y, adj_matrix, edge_idx_arr = create_xor_data(num_samples=20, noise_std=0.3, same_class_link_prob=0.7, diff_class_link_prob=0.1)
     x, y, adj_matrix, edge_idx_arr = create_duplicated_xor_data(
         num_samples=40, 
+        noise_std=0.25,
+        num_nearest_neighbors=10,
         same_class_link_prob=0.8, 
         diff_class_link_prob=0.05, 
-        feature_repeats=5, 
-        dropout_rate=0.0
+        feature_repeats=1
     )
     print("Node features:\n", x, "\n")
     print("Labels:\n", y, "\n")
