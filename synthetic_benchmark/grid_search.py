@@ -130,7 +130,7 @@ def main():
         "epochs": 300,
         "feature_repeats": 5,
         "gradient_activ_save_freq": 50,
-        "experiment_repeats": 10,
+        "experiment_repeats": 20,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
         "noise_std": 0.0,  # Set for each feature repeat in 10-feature task

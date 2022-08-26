@@ -86,7 +86,104 @@ def plot_attn_weights(edge_attn_weights_matrix, graph_data, fig_save_path):
 
         sns.set_theme()
         g = sns.FacetGrid(edge_coeffs_df_melted, col="Relationship", col_wrap=2, sharex=True, sharey=True, height=4)
-        g.map(plt.hist, "value", alpha=.4, bins=np.arange(0.0, 1.05, 0.05))
+        g.map(plt.hist, "value", alpha=.4, bins=np.arange(-4.0, 4.05, 0.4))
+        g.set_ylabels('Count')
+        g.fig.subplots_adjust(top=0.9)
+        g.fig.suptitle(key)
+        plt.savefig(os.path.join(fig_save_path, "{}_attn_coeff_grid.png".format(key)), bbox_inches="tight", facecolor="white")
+        plt.close()
+
+
+def plot_attn_weights_duplicate_features(edge_attn_weights_matrix, graph_data, fig_save_path):
+    """
+    This is a utility function for plotting attention weights for the synthetic XOR dataset.
+    It accepts a matrix of edge attention weight, and plots distribution plots.
+
+    # edge_attn_weights_matrix is shape (batch_size, target_sequence_len, source_seq_len)
+        # --> row index is feature index of destination node
+        # --> col index is feature index of source node
+        # --> row sums up to one, because feature in destination node is contextualized 
+        # by a linear combo with attention weights of source node features
+    # Interpretation: attn_matr[idx, row, col] = how much does feature row_idx in destination
+    # node listen to feature col_idx in source node
+
+    Args:
+    - edge_attn_weights_matrix: matrix of size [num_edges, num_features, num_features]
+    """
+    # Get lists of edge indices for homogenous and heterogenous edges
+    cutoffs = list(range(0, graph_data.x.shape[0], graph_data.x.shape[0] // 4))
+    df_dict = {
+        "XOR_Src00-Dest00": [],
+        "XOR_Src00-Dest01": [],
+        "XOR_Src00-Dest10": [],
+        "XOR_Src00-Dest11": [],
+        "XOR_Src01-Dest00": [],
+        "XOR_Src01-Dest01": [],
+        "XOR_Src01-Dest10": [],
+        "XOR_Src01-Dest11": [],
+        "XOR_Src10-Dest00": [],
+        "XOR_Src10-Dest01": [],
+        "XOR_Src10-Dest10": [],
+        "XOR_Src10-Dest11": [],
+        "XOR_Src11-Dest00": [],
+        "XOR_Src11-Dest01": [],
+        "XOR_Src11-Dest10": [],
+        "XOR_Src11-Dest11": [],
+    }
+    for edge_idx in range(graph_data.edge_index.shape[1]):
+        edge_connection_str = "XOR_Src"
+        if graph_data.edge_index[0,edge_idx] < cutoffs[1]:
+            edge_connection_str += "00"
+        elif graph_data.edge_index[0,edge_idx] >= cutoffs[1] and graph_data.edge_index[0,edge_idx] < cutoffs[2]:
+            edge_connection_str += "01"
+        elif graph_data.edge_index[0,edge_idx] >= cutoffs[2] and graph_data.edge_index[0,edge_idx] < cutoffs[3]:
+            edge_connection_str += "10"
+        elif graph_data.edge_index[0,edge_idx] >= cutoffs[3]:
+            edge_connection_str += "11"
+        else:
+            raise Exception("Unknown origin XOR node")
+        
+        edge_connection_str += "-Dest"
+
+        if graph_data.edge_index[1,edge_idx] < cutoffs[1]:
+            edge_connection_str += "00"
+        elif graph_data.edge_index[1,edge_idx] >= cutoffs[1] and graph_data.edge_index[1,edge_idx] < cutoffs[2]:
+            edge_connection_str += "01"
+        elif graph_data.edge_index[1,edge_idx] >= cutoffs[2] and graph_data.edge_index[1,edge_idx] < cutoffs[3]:
+            edge_connection_str += "10"
+        elif graph_data.edge_index[1,edge_idx] >= cutoffs[3]:
+            edge_connection_str += "11"
+        else:
+            raise Exception("Unknown destination XOR node")
+        
+        df_dict[edge_connection_str].append(edge_idx)
+    
+    for key in list(df_dict.keys()):
+        if len(df_dict[key]) == 0:
+            continue
+        edge_coeffs_df = pd.DataFrame({
+            "Dst Feat 1 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],0,0],
+            "Dst Feat 1 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],0,1],
+            "Dst Feat 1 attend to Src Feat 3": edge_attn_weights_matrix[df_dict[key],0,2],
+            "Dst Feat 1 attend to Src Feat 4": edge_attn_weights_matrix[df_dict[key],0,3],
+            "Dst Feat 2 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],1,0],
+            "Dst Feat 2 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],1,1],
+            "Dst Feat 2 attend to Src Feat 3": edge_attn_weights_matrix[df_dict[key],1,2],
+            "Dst Feat 2 attend to Src Feat 4": edge_attn_weights_matrix[df_dict[key],1,3],
+            "Dst Feat 3 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],2,0],
+            "Dst Feat 3 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],2,1],
+            "Dst Feat 3 attend to Src Feat 3": edge_attn_weights_matrix[df_dict[key],2,2],
+            "Dst Feat 3 attend to Src Feat 4": edge_attn_weights_matrix[df_dict[key],2,3],
+            "Dst Feat 4 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],3,0],
+            "Dst Feat 4 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],3,1],
+            "Dst Feat 4 attend to Src Feat 3": edge_attn_weights_matrix[df_dict[key],3,2],
+            "Dst Feat 4 attend to Src Feat 4": edge_attn_weights_matrix[df_dict[key],3,3],
+        })
+        edge_coeffs_df_melted = pd.melt(edge_coeffs_df, var_name="Relationship")
+
+        sns.set_theme()
+        g = sns.FacetGrid(edge_coeffs_df_melted, col="Relationship", col_wrap=4, sharex=True, sharey=True, height=4)
+        g.map(plt.hist, "value", alpha=.4, bins=np.arange(-7.5, 7.55, 0.5))  # 
         g.set_ylabels('Count')
         g.fig.subplots_adjust(top=0.9)
         g.fig.suptitle(key)
@@ -121,11 +218,18 @@ def visualize_attention_coefficients(args, save_path):
     _ = model(train_data)
     print(model.conv1.attn_output_weights.shape)
 
-    plot_attn_weights(
-        edge_attn_weights_matrix=model.conv1.attn_output_weights.detach().numpy(), 
-        graph_data=train_data,
-        fig_save_path=save_path
-    )
+    if args["feature_repeats"] == 1:
+        plot_attn_weights(
+            edge_attn_weights_matrix=model.conv1.attn_output_weights.detach().numpy(), 
+            graph_data=train_data,
+            fig_save_path=save_path
+        )
+    else:
+        plot_attn_weights_duplicate_features(
+            edge_attn_weights_matrix=model.conv1.attn_output_weights.detach().numpy(), 
+            graph_data=train_data,
+            fig_save_path=save_path
+        )
 
 
 def main():
@@ -134,9 +238,9 @@ def main():
         # "diff_class_link_prob": 0.05,
         "dropout": 0.0,
         "epochs": 200,
-        "feature_repeats": 1,
-        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-16-17_29_31_search",
-        "experiment_load_name": "2022-08-16-17_38_50_113_0.6",
+        "feature_repeats": 5,
+        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-25-12_23_19_search",
+        "experiment_load_name": "2022-08-25-12_49_54_102_0.6",
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "AMPNet",

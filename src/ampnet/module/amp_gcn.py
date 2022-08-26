@@ -39,7 +39,7 @@ class AMPGCN(torch.nn.Module):
         self.device = device
         self.conv1_embedding = None
         self.conv2_embedding = None
-        self.emb_dim = feat_emb_dim + val_emb_dim
+        self.emb_dim = embedding_dim
         self.num_sampled_vectors = num_sampled_vectors
         self.num_node_features = num_node_features
         self.output_dim = output_dim
@@ -129,9 +129,10 @@ class AMPGCN(torch.nn.Module):
             for node_idx in range(x.shape[0]):
                 # present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
                 feat_idxs = list(range(self.num_node_features))
-                # sampled_feature_idxs = np.random.choice(present_feat_idxs, size=num_sampled_vectors, replace=True)
-                sampled_vectors = self.feature_embedding_table.weight[feat_idxs]  # [num_sampled_vectors, emb_dim]
-                sampled_vectors = torch.cat((sampled_vectors, x[node_idx].unsqueeze(-1)), dim=1)
+                sampled_feature_idxs = np.random.choice(feat_idxs, size=self.num_sampled_vectors, replace=True)
+                # sampled_vectors = self.feature_embedding_table.weight[feat_idxs]  # [num_sampled_vectors, emb_dim]
+                sampled_vectors = torch.tile(self.feature_embedding_table.weight, [self.feature_repeats, 1])[sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
+                sampled_vectors = torch.cat((sampled_vectors, x[node_idx, sampled_feature_idxs].unsqueeze(-1)), dim=1)
                 sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
 
             sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)

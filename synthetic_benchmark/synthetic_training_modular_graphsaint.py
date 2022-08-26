@@ -4,6 +4,8 @@ import datetime
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torch_geometric.loader import GraphSAINTRandomWalkSampler
 from src.ampnet.utils.utils import *
 from synthetic_benchmark.xor_training_utils import get_xor_data, get_duplicated_xor_data, get_model
 
@@ -38,8 +40,12 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
             save_path=save_path,
         )
     
+    train_loader = GraphSAINTRandomWalkSampler(train_data, batch_size=10, walk_length=150,
+                                         num_steps=args["epoch_iterations"], sample_coverage=100)
+    test_loader = GraphSAINTRandomWalkSampler(test_data, batch_size=10, walk_length=150,
+                                         num_steps=1, sample_coverage=100)
     optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"], weight_decay=5e-4)
-    criterion = nn.NLLLoss()
+    # criterion = nn.NLLLoss()
     
     train_loss_list = []
     train_acc_list = []
@@ -47,42 +53,48 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
     test_acc_list = []
 
     for epoch in range(args["epochs"]):
-        model.train()
-        optimizer.zero_grad()
+        for idx, data_obj in enumerate(train_loader):
+            model.train()
+            optimizer.zero_grad()
 
-        out = model(train_data)
-        train_loss = criterion(out, train_data.y.long())
-        # pred = (out.squeeze(-1) > 0.5).float()
-        pred = torch.argmax(out, dim=1)
-        train_accuracy = accuracy(pred.detach().numpy(), train_data.y.detach().numpy())
-
-        train_loss.backward()
-        if epoch % args["gradient_activ_save_freq"] == 0:
-            model.plot_grad_flow(grads_path, epoch, iter=0)
-            # model.visualize_gradients(grads_path, epoch, iter=0)
-            # model.visualize_activations(activ_path, train_data, epoch, iter=0)
-        optimizer.step()
-
-        # Test
-        model.eval()
-        with torch.no_grad():
-            out = model(test_data)
+            out = model(data_obj)
+            # train_loss = criterion(out, train_data.y.long())
+            train_loss = F.nll_loss(out, data_obj.y.long(), reduction='none')
+            train_loss = (train_loss * data_obj.node_norm).sum()
             # pred = (out.squeeze(-1) > 0.5).float()
             pred = torch.argmax(out, dim=1)
-            test_loss = criterion(out, test_data.y.long())
-            test_accuracy = accuracy(pred.detach().numpy(), test_data.y.detach().numpy())
-        
-        epoch_acc_str = "Epoch {:05d} | Train Loss {:.4f}; Acc {:.4f} | Test Loss {:.4f} | Acc {:.4f} " \
-            .format(epoch, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy)
-        if logfile is None:
-            print(epoch_acc_str)
-        else:
-            logfile.write(epoch_acc_str + "\n")
-            logfile.flush()
-        train_loss_list.append(train_loss.item())
-        train_acc_list.append(train_accuracy)
-        test_loss_list.append(test_loss.item())
-        test_acc_list.append(test_accuracy)
+            train_accuracy = accuracy(pred.detach().numpy(), data_obj.y.detach().numpy())
+
+            train_loss.backward()
+            if epoch % args["gradient_activ_save_freq"] == 0:
+                model.plot_grad_flow(grads_path, epoch, iter=0)
+                # model.visualize_gradients(grads_path, epoch, iter=0)
+                # model.visualize_activations(activ_path, data_obj, epoch, iter=0)
+            optimizer.step()
+
+            # Test
+            model.eval()
+            with torch.no_grad():
+                for test_idx, test_data_obj in enumerate(test_loader):
+                    out = model(test_data_obj)
+                    # pred = (out.squeeze(-1) > 0.5).float()
+                    pred = torch.argmax(out, dim=1)
+                    # test_loss = criterion(out, test_data.y.long(), reduction="none")
+                    test_loss = F.nll_loss(out, test_data_obj.y.long(), reduction='none')
+                    test_loss = (test_loss * test_data_obj.node_norm).sum()
+                    test_accuracy = accuracy(pred.detach().numpy(), test_data_obj.y.detach().numpy())
+            
+            epoch_acc_str = "Epoch {:05d} Partition {:05d} | Train Loss {:.4f}; Acc {:.4f} | Test Loss {:.4f} | Acc {:.4f} " \
+                .format(epoch, idx, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy)
+            if logfile is None:
+                print(epoch_acc_str)
+            else:
+                logfile.write(epoch_acc_str + "\n")
+                logfile.flush()
+            train_loss_list.append(train_loss.item())
+            train_acc_list.append(train_accuracy)
+            test_loss_list.append(test_loss.item())
+            test_acc_list.append(test_accuracy)
 
     plot_loss_curves(
         train_loss_list, 
@@ -111,7 +123,8 @@ if __name__ == "__main__":
     ARGS = {
         # "diff_class_link_prob": 0.05,
         "dropout": 0.0,
-        "epochs": 200,
+        "epochs": 20,
+        "epoch_iterations": 10,
         "feature_repeats": 716,
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,

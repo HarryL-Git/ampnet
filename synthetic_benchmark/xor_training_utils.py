@@ -57,19 +57,19 @@ def get_model(model_name, dropout):
     if model_name == "AMPNet":
         model = AMPGCN(
             device="cpu", 
-            embedding_dim=3, 
-            num_heads=1,
-            num_node_features=10, 
-            num_sampled_vectors=10,
+            embedding_dim=128, 
+            num_heads=4,
+            num_node_features=1432, 
+            num_sampled_vectors=200,
             output_dim=2, 
             softmax_out=True, 
-            feat_emb_dim=2, 
+            feat_emb_dim=127, 
             val_emb_dim=1,
-            downsample_feature_vectors=False,
+            downsample_feature_vectors=True,
             average_pooling_flag=True,
             dropout_rate=dropout,
             dropout_adj_rate=dropout,
-            feature_repeats=5)
+            feature_repeats=716)
     elif model_name == "GCN":
         model = GCN(
             num_node_features=2, 

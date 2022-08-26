@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch_geometric.nn
 # from performer_pytorch import CrossAttention
 
+from src.ampnet.conv.custom_multihead_attn import MultiheadAttention
+
 
 class AMPConv(torch_geometric.nn.MessagePassing):
     def __init__(self, embed_dim, num_heads):
@@ -12,7 +14,8 @@ class AMPConv(torch_geometric.nn.MessagePassing):
         self.num_heads = num_heads
         self.embed_dim = embed_dim
 
-        self.multi_head_attention = nn.MultiheadAttention(
+        # Custom multihead attention removing softmax layer
+        self.multi_head_attention = MultiheadAttention(
             embed_dim=embed_dim,
             num_heads=num_heads,
             batch_first=True,

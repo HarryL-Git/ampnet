@@ -23,7 +23,7 @@ all_data = dataset[0]
 
 
 # Create save paths
-save_path = "./runs" if TRAIN_AMPCONV else "./runs_GCN_baseline"
+save_path = "./experiments/runs" if TRAIN_AMPCONV else "./experiments/runs_GCN_baseline"
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
@@ -47,7 +47,21 @@ if not os.path.exists(ACTIV_PATH):
 
 
 if TRAIN_AMPCONV:
-    model = AMPGCN(device=device).to(device)
+    model = AMPGCN(
+            device="cpu", 
+            embedding_dim=128, 
+            num_heads=4,
+            num_node_features=1432, 
+            num_sampled_vectors=20,
+            output_dim=2, 
+            softmax_out=True, 
+            feat_emb_dim=127, 
+            val_emb_dim=1,
+            downsample_feature_vectors=True,
+            average_pooling_flag=True,
+            dropout_rate=0.0,
+            dropout_adj_rate=0.0,
+            feature_repeats=716)
 else:
     model = GCN().to(device)
 
