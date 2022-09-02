@@ -1,0 +1,26 @@
+Expt notes: (All have 2 attention heads)
+Hypothesis: high dimensionality, specifically in embedding dimension, is causing unstable training
+1. Feature repeats 5, no downsampling, feat emb dim 9 works
+2. Feature repeats 10, no downsampling, feat emb dim 9 works
+3. Feature repeats 10, downsampling to 10 features, feat emb dim 9 works
+    1. Problem is not because of downsampling feature vectors; implementation  works, no bug in implementation
+    2. Accuracy gets up to 100% like normal
+4. Feature repeats 10, downsampling to 10 features, feat emb dim 19 works
+5. Feature repeats 40, downsampling to 10 features, feature emb dim 19 works
+6. Feature repeats 40, downsampling to 20 features, feature emb dim 19 works
+    1. Training reliably reaches 100%, but takes a few more epochs with training accuracy fluctuating
+7. Feature repeats 100, downsampling to 20 features, feature emb dim 19 works
+    1. Verifying that feature repeats does not change anything, important parameters are number of downsampled features and feature emb dim
+8. Feature repeats 716, downsampling to 20 features, feature emb dim 19 works
+    1. Confirm: feature repeats does not change anything on XOR dataset
+9. Feature repeats 716, downsampling to 40 features, feature emb dim 19 works
+10. Feature repeats 716, downsampling to 100 features, feature emb dim 19 works
+    1. Works, takes a few epochs with unstable training and fluctuating loss values
+    2. Still gets to 100%
+    3. Nearly too high-dimensional
+11. Feature repeats 716, downsampling to 100 features, feature emb dim 63
+    1. Does not work, training is too slow and unstable
+12. Feature repeats 716, downsampling to 20 features, feature emb dim 63
+    1. Converges, 100% accuracy
+13. Feature repeats 716, downsampling to 20 features, feature emb dim 31
+    1. Converges, training well

@@ -53,23 +53,23 @@ def get_duplicated_xor_data(num_samples, noise_std, num_nearest_neighbors, featu
     return train_data, test_data
 
 
-def get_model(model_name, dropout):
+def get_model(model_name, dropout, args):
     if model_name == "AMPNet":
         model = AMPGCN(
             device="cpu", 
-            embedding_dim=128, 
-            num_heads=4,
-            num_node_features=1432, 
-            num_sampled_vectors=200,
+            embedding_dim=32,  # 128
+            num_heads=2,
+            num_node_features=args["feature_repeats"] * 2,  # Needs to match with feature_repeats, if using XOR data. 1432
+            num_sampled_vectors=20,  # 100
             output_dim=2, 
             softmax_out=True, 
-            feat_emb_dim=127, 
+            feat_emb_dim=31,  # 127 
             val_emb_dim=1,
-            downsample_feature_vectors=True,
+            downsample_feature_vectors=True,  # True
             average_pooling_flag=True,
             dropout_rate=dropout,
             dropout_adj_rate=dropout,
-            feature_repeats=716)
+            feature_repeats=args["feature_repeats"])  # 716
     elif model_name == "GCN":
         model = GCN(
             num_node_features=2, 

@@ -126,21 +126,21 @@ class AMPGCN(torch.nn.Module):
         if self.downsampling_vectors:
             # x shape: [num_nodes, 1433]
             sampled_node_vectors_unrolled = []
-            for node_idx in range(x.shape[0]):
+            for node_idx in range(x_.shape[0]):
                 # present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
                 feat_idxs = list(range(self.num_node_features))
                 sampled_feature_idxs = np.random.choice(feat_idxs, size=self.num_sampled_vectors, replace=True)
                 # sampled_vectors = self.feature_embedding_table.weight[feat_idxs]  # [num_sampled_vectors, emb_dim]
                 sampled_vectors = torch.tile(self.feature_embedding_table.weight, [self.feature_repeats, 1])[sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
-                sampled_vectors = torch.cat((sampled_vectors, x[node_idx, sampled_feature_idxs].unsqueeze(-1)), dim=1)
+                sampled_vectors = torch.cat((sampled_vectors, x_[node_idx, sampled_feature_idxs].unsqueeze(-1)), dim=1)
                 sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
 
             sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
-            node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+            node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
         else:
             # Add feature embedding from table to each feature in each node
             node_vectors_unrolled = []
-            for node_idx in range(x.shape[0]):
+            for node_idx in range(x_.shape[0]):
                 x_embed = torch.cat((
                     torch.tile(self.feature_embedding_table.weight, [self.feature_repeats, 1]), 
                     x_[node_idx].unsqueeze(-1)), dim=1)
@@ -148,7 +148,7 @@ class AMPGCN(torch.nn.Module):
             
             # Concatenate and reshape into flatten node flattened embeddings
             node_vectors_unrolled = torch.cat(node_vectors_unrolled)
-            node_vectors_rerolled = torch.reshape(node_vectors_unrolled, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+            node_vectors_rerolled = torch.reshape(node_vectors_unrolled, (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
 
         node_vectors_rerolled = node_vectors_rerolled.requires_grad_(True)
         return node_vectors_rerolled

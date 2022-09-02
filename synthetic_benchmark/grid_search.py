@@ -79,7 +79,7 @@ def controller(save_path, args):
     # same_class_link_probabilities = [0.8, 0.5, 0.25, 0.1, 0.05, 0.0]
 
     # Multiprocessing
-    num_cpus = mp.cpu_count() - 4
+    num_cpus = 3  # mp.cpu_count() - 4
     counter = 0
     with mp.Pool(processes=num_cpus) as pool:
         for noise_std_val in noise_std_values:
@@ -127,10 +127,10 @@ def main():
     ARGS = {
         # "diff_class_link_prob": 0.05,
         "dropout": 0.0,
-        "epochs": 300,
-        "feature_repeats": 5,
+        "epochs": 150,
+        "feature_repeats": 716,
         "gradient_activ_save_freq": 50,
-        "experiment_repeats": 20,
+        "experiment_repeats": 5,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
         "noise_std": 0.0,  # Set for each feature repeat in 10-feature task
@@ -152,6 +152,7 @@ def main():
         os.mkdir(save_path)
         os.system("touch {}/details.txt".format(save_path))
         os.system("cp ./synthetic_benchmark/grid_search.py {}/".format(save_path))
+        os.system("cp ./synthetic_benchmark/xor_training_utils.py {}/".format(save_path))
 
     # Run experiments
     start_time = time.time()

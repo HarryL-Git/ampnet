@@ -14,7 +14,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train_model(args, save_path, grads_path, activ_path, logfile=None):
     # Define model
-    model = get_model(args["model_name"], args["dropout"])
+    model = get_model(args["model_name"], args["dropout"], args)
     model.to(device)
 
     # Freeze all but last linear classifier layer
@@ -99,13 +99,13 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
     plot_loss_curves(
         train_loss_list, 
         test_loss_list, 
-        epoch_count=args["epochs"], 
+        epoch_count=args["epochs"] * args["epoch_iterations"], 
         save_path=save_path, 
         model_name=args["model_name"])
     plot_acc_curves(
         train_acc_list, 
         test_acc_list, 
-        epoch_count=args["epochs"], 
+        epoch_count=args["epochs"] * args["epoch_iterations"], 
         save_path=save_path, 
         model_name=args["model_name"])
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     ARGS = {
         # "diff_class_link_prob": 0.05,
         "dropout": 0.0,
-        "epochs": 20,
+        "epochs": 15,
         "epoch_iterations": 10,
         "feature_repeats": 716,
         "gradient_activ_save_freq": 50,
@@ -149,7 +149,8 @@ if __name__ == "__main__":
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
         os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-        os.system("cp ./synthetic_benchmark/synthetic_training_modular.py {}/".format(SAVE_PATH))
+        os.system("cp ./synthetic_benchmark/synthetic_training_modular_graphsaint.py {}/".format(SAVE_PATH))
+        os.system("cp ./synthetic_benchmark/xor_training_utils.py {}/".format(SAVE_PATH))
     if not os.path.exists(GRADS_PATH):
         os.mkdir(GRADS_PATH)
     if not os.path.exists(ACTIV_PATH):
