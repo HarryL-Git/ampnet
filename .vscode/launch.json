@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "/Users/syedrizvi/Desktop/Projects/SpatialTranscriptomics/ampnet",
+            "cwd": "${fileDirname}",
             "env": {"PYTHONPATH": "${workspaceFolder}"}
         }
     ]

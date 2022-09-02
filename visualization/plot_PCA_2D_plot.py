@@ -1,3 +1,4 @@
+import os
 import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -6,13 +7,15 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from torch_geometric.datasets import Planetoid
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
+
 
 def plot_PCA_2D(embedding_arr, plot_name, plot_title):
     plt.title(plot_title)
     sns.scatterplot(x=embedding_arr[:,0], y=embedding_arr[:,1])
     plt.xlabel("First Component")
     plt.ylabel("Second Component")
-    plt.savefig("./{}.png".format(plot_name), facecolor="white", bbox_inches="tight")
+    plt.savefig("visualization/{}.png".format(plot_name), facecolor="white", bbox_inches="tight")
     # plt.show()
     plt.close()
 
@@ -23,7 +26,7 @@ def plot_PCA_cumulative_expl_var_ratio(data):
     plt.plot(np.cumsum(pca.explained_variance_ratio_))
     plt.xlabel('number of components')
     plt.ylabel('cumulative explained variance')
-    plt.savefig("./cumulative_pca_expl_var_ratio.png", facecolor="white", bbox_inches="tight")
+    plt.savefig("visualization/cumulative_pca_expl_var_ratio.png", facecolor="white", bbox_inches="tight")
     # plt.show()
     plt.close()
 

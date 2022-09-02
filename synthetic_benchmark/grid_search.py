@@ -123,6 +123,8 @@ def controller(save_path, args):
 
 
 def main():
+    os.chdir("..")  # Change current working directory to parent directory of GitHub repository
+    
     # Arguments
     ARGS = {
         # "diff_class_link_prob": 0.05,
@@ -142,7 +144,7 @@ def main():
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
     # Create save paths
-    save_path = "./synthetic_benchmark/runs_{}".format(ARGS["model_name"])
+    save_path = "synthetic_benchmark/runs_{}".format(ARGS["model_name"])
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     
@@ -151,8 +153,8 @@ def main():
     if not os.path.exists(save_path):
         os.mkdir(save_path)
         os.system("touch {}/details.txt".format(save_path))
-        os.system("cp ./synthetic_benchmark/grid_search.py {}/".format(save_path))
-        os.system("cp ./synthetic_benchmark/xor_training_utils.py {}/".format(save_path))
+        os.system("cp synthetic_benchmark/grid_search.py {}/".format(save_path))
+        os.system("cp synthetic_benchmark/xor_training_utils.py {}/".format(save_path))
 
     # Run experiments
     start_time = time.time()

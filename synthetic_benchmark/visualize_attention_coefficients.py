@@ -7,6 +7,8 @@ import seaborn as sns
 
 from synthetic_benchmark.xor_training_utils import get_xor_data, get_duplicated_xor_data, get_model
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
+
 
 def plot_attn_weights(edge_attn_weights_matrix, graph_data, fig_save_path):
     """
@@ -253,7 +255,7 @@ def main():
     assert args["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
     # Create save paths
-    save_path = "./synthetic_benchmark/visualize_AMPNet_attn_coeffs"
+    save_path = "synthetic_benchmark/visualize_AMPNet_attn_coeffs"
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     

@@ -9,6 +9,7 @@ from torch_geometric.loader import GraphSAINTRandomWalkSampler
 from src.ampnet.utils.utils import *
 from synthetic_benchmark.xor_training_utils import get_xor_data, get_duplicated_xor_data, get_model
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -138,7 +139,7 @@ if __name__ == "__main__":
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
     # Create save paths
-    save_path = "./synthetic_benchmark/runs_{}".format(ARGS["model_name"])
+    save_path = "synthetic_benchmark/runs_{}".format(ARGS["model_name"])
     if not os.path.exists(save_path):
         os.mkdir(save_path)
 
@@ -149,8 +150,8 @@ if __name__ == "__main__":
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
         os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-        os.system("cp ./synthetic_benchmark/synthetic_training_modular_graphsaint.py {}/".format(SAVE_PATH))
-        os.system("cp ./synthetic_benchmark/xor_training_utils.py {}/".format(SAVE_PATH))
+        os.system("cp synthetic_benchmark/synthetic_training_modular_graphsaint.py {}/".format(SAVE_PATH))
+        os.system("cp synthetic_benchmark/xor_training_utils.py {}/".format(SAVE_PATH))
     if not os.path.exists(GRADS_PATH):
         os.mkdir(GRADS_PATH)
     if not os.path.exists(ACTIV_PATH):

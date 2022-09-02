@@ -24,6 +24,8 @@ from src.ampnet.module.gcn_classifier import GCN
 This script is out of date, and needs to be refactored before running again.
 """
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
+
 
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
@@ -257,7 +259,7 @@ ACTIV_PATH = os.path.join(SAVE_PATH, "activations")
 if not os.path.exists(SAVE_PATH):
     os.mkdir(SAVE_PATH)
     os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))  # Empty details file
-    os.system("cp cora_benchmark_graphsaint.py {}/".format(SAVE_PATH))
+    os.system("cp experimentsd/cora_benchmark_graphsaint.py {}/".format(SAVE_PATH))
 if not os.path.exists(GRADS_PATH):
     os.mkdir(GRADS_PATH)
 if not os.path.exists(ACTIV_PATH):

@@ -1,4 +1,4 @@
-
+import os
 import torch
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -6,6 +6,7 @@ from torch_geometric.datasets import Planetoid
 # from torch_geometric.loader import GraphSAINTRandomWalkSampler
 from torch_geometric.utils import to_networkx
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
 
 
 
@@ -226,6 +227,6 @@ for epoch in range(1):
         g = to_networkx(data, to_undirected=True)
         nx.draw(g)
         g.clear()
-        # plt.savefig("./plots/graphsaint_subgraph_{}_batch_s{}_walk_s{}.png")
+        # plt.savefig("visualization/plots/graphsaint_subgraph_{}_batch_s{}_walk_s{}.png")
 
 

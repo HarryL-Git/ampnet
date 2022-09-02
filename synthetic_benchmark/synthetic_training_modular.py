@@ -107,6 +107,10 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
 
 
 if __name__ == "__main__":
+    # Change current working directory to parent directory of GitHub repository
+    # Do this in if guard so that current working directory of grid search isn't messed up
+    os.chdir("..")
+
     # Arguments
     ARGS = {
         # "diff_class_link_prob": 0.05,
@@ -125,7 +129,7 @@ if __name__ == "__main__":
     assert ARGS["model_name"] in ["LinearLayer", "TwoLayerSigmoid", "GCN", "GCNOneLayer", "AMPNet"]
 
     # Create save paths
-    save_path = "./synthetic_benchmark/runs_{}".format(ARGS["model_name"])
+    save_path = "synthetic_benchmark/runs_{}".format(ARGS["model_name"])
     if not os.path.exists(save_path):
         os.mkdir(save_path)
 
@@ -136,8 +140,8 @@ if __name__ == "__main__":
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
         os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-        os.system("cp ./synthetic_benchmark/synthetic_training_modular.py {}/".format(SAVE_PATH))
-        os.system("cp ./synthetic_benchmark/xor_training_utils.py {}/".format(SAVE_PATH))
+        os.system("cp synthetic_benchmark/synthetic_training_modular.py {}/".format(SAVE_PATH))
+        os.system("cp synthetic_benchmark/xor_training_utils.py {}/".format(SAVE_PATH))
     if not os.path.exists(GRADS_PATH):
         os.mkdir(GRADS_PATH)
     if not os.path.exists(ACTIV_PATH):

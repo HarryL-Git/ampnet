@@ -10,7 +10,6 @@ from matplotlib.lines import Line2D
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -18,6 +17,8 @@ from torch_geometric.datasets import Planetoid
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
 from torch_geometric.utils.dropout import dropout_adj
 from src.ampnet.utils.utils import *
+
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
 
 
 # Global variables
@@ -27,7 +28,7 @@ all_data = dataset[0].to(device)
 
 
 # Create save paths
-save_path = "./experiments/runs_linear_layer"
+save_path = "experiments/runs_linear_layer"
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
@@ -37,7 +38,7 @@ ACTIV_PATH = os.path.join(SAVE_PATH, "activations")
 if not os.path.exists(SAVE_PATH):
     os.mkdir(SAVE_PATH)
     os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))  # Empty details file
-    os.system("cp ./experiments/cora_total_pooling.py {}/".format(SAVE_PATH))
+    os.system("cp experiments/cora_total_pooling.py {}/".format(SAVE_PATH))
 if not os.path.exists(GRADS_PATH):
     os.mkdir(GRADS_PATH)
 if not os.path.exists(ACTIV_PATH):

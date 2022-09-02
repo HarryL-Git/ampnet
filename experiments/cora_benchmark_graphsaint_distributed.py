@@ -14,8 +14,9 @@ from src.ampnet.module.amp_gcn import AMPGCN
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+
 
 # Global Variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
@@ -31,7 +32,7 @@ def train(rank, size, backend):
     all_data = dataset[0]
 
     if rank == 0:
-        save_path = "./runs_distrib" if TRAIN_AMPCONV else "./runs_GCN_baseline_distrib"
+        save_path = "experiments/runs_distrib" if TRAIN_AMPCONV else "experiments/runs_GCN_baseline_distrib"
         if not os.path.exists(save_path):
             os.mkdir(save_path)
 
@@ -41,12 +42,12 @@ def train(rank, size, backend):
         if not os.path.exists(SAVE_PATH):
             os.mkdir(SAVE_PATH)
             os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-            os.system("cp ./cora_benchmark_graphsaint_distributed.py {}/".format(SAVE_PATH))
+            os.system("cp cora_benchmark_graphsaint_distributed.py {}/".format(SAVE_PATH))
             if TRAIN_AMPCONV:
-                os.system("cp ./src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
-                os.system("cp ./src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
+                os.system("cp src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
+                os.system("cp src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
             else:
-                os.system("cp ./src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
+                os.system("cp src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
         if not os.path.exists(GRADS_PATH):
             os.mkdir(GRADS_PATH)
         if not os.path.exists(ACTIV_PATH):

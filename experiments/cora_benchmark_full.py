@@ -10,6 +10,8 @@ from src.ampnet.utils.utils import *
 from src.ampnet.module.gcn_classifier import GCN
 from src.ampnet.module.amp_gcn import AMPGCN
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
+
 
 # Define global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
@@ -19,7 +21,7 @@ data = dataset[0].to(device)
 
 
 # Create save paths
-save_path = "./experiments/runs_full" if TRAIN_AMPCONV else "./experiments/runs_GCN_full"
+save_path = "experiments/runs_full" if TRAIN_AMPCONV else "./experiments/runs_GCN_full"
 if not os.path.exists(save_path):
     os.mkdir(save_path)
 
@@ -30,12 +32,12 @@ ACTIV_PATH = os.path.join(SAVE_PATH, "activations")
 if not os.path.exists(SAVE_PATH):
     os.mkdir(SAVE_PATH)
     os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))
-    os.system("cp ./experiments/cora_benchmark_full.py {}/".format(SAVE_PATH))
+    os.system("cp experiments/cora_benchmark_full.py {}/".format(SAVE_PATH))
     if TRAIN_AMPCONV:
-        os.system("cp ./src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
-        os.system("cp ./src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
+        os.system("cp src/ampnet/conv/amp_conv.py {}/".format(SAVE_PATH))
+        os.system("cp src/ampnet/module/amp_gcn.py {}/".format(SAVE_PATH))
     else:
-        os.system("cp ./src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
+        os.system("cp src/ampnet/module/gcn_classifier.py {}/".format(SAVE_PATH))
 if not os.path.exists(GRADS_PATH):
     os.mkdir(GRADS_PATH)
 

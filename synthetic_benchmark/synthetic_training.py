@@ -13,13 +13,14 @@ from src.ampnet.module.linear_layer import LinearLayer
 from src.ampnet.module.two_layer_sigmoid_mlp import TwoLayerSigmoid
 from synthetic_benchmark.synthetic_xor import create_xor_data, plot_node_features
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
 
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Create save paths
-save_path = "./synthetic_benchmark/runs" if TRAIN_AMPCONV else "./synthetic_benchmark/runs_GCN"
+save_path = "synthetic_benchmark/runs" if TRAIN_AMPCONV else "./synthetic_benchmark/runs_GCN"
 # save_path = "./synthetic_benchmark/runs_linear_layer"
 if not os.path.exists(save_path):
     os.mkdir(save_path)
@@ -30,7 +31,7 @@ ACTIV_PATH = os.path.join(SAVE_PATH, "activations")
 if not os.path.exists(SAVE_PATH):
     os.mkdir(SAVE_PATH)
     os.system("touch {}".format(os.path.join(SAVE_PATH, "_details.txt")))  # Empty details file
-    os.system("cp ./synthetic_benchmark/synthetic_training.py {}/".format(SAVE_PATH))
+    os.system("cp synthetic_benchmark/synthetic_training.py {}/".format(SAVE_PATH))
 
 if not os.path.exists(GRADS_PATH):
     os.mkdir(GRADS_PATH)

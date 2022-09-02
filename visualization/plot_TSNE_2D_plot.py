@@ -1,3 +1,4 @@
+import os
 import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -6,13 +7,15 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 from torch_geometric.datasets import Planetoid
 
+os.chdir("..")  # Change current working directory to parent directory of GitHub repository
+
 
 def plot_TSNE_2D(embedding_arr, plot_name, plot_title):
     plt.title(plot_title)
     sns.scatterplot(x=embedding_arr[:,0], y=embedding_arr[:,1])
     plt.xlabel("tSNE 1")
     plt.ylabel("tSNE 2")
-    plt.savefig("./{}.png".format(plot_name), facecolor="white", bbox_inches="tight")
+    plt.savefig("visualization/{}.png".format(plot_name), facecolor="white", bbox_inches="tight")
     # plt.show()
     plt.close()
 
