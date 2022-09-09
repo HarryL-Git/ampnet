@@ -12,7 +12,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train_model(args, save_path, grads_path, activ_path, logfile=None):
     # Define model
-    model = get_model(args["model_name"], args["dropout"], args)
+    model = get_model(args["model_name"], args["dropout"], args, device)
     model.to(device)
 
     # Freeze all but last linear classifier layer
@@ -38,7 +38,7 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
             save_path=save_path,
         )
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"], weight_decay=5e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args["learning_rate"], weight_decay=5e-4)  # 5e-4
     criterion = nn.NLLLoss()
     
     train_loss_list = []
@@ -51,16 +51,17 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         optimizer.zero_grad()
 
         out = model(train_data)
-        train_loss = criterion(out, train_data.y.long())
+        train_loss = criterion(out, train_data.y.long().to(device))
         # pred = (out.squeeze(-1) > 0.5).float()
         pred = torch.argmax(out, dim=1)
-        train_accuracy = accuracy(pred.detach().numpy(), train_data.y.detach().numpy())
+        train_accuracy = accuracy(pred.detach().cpu().numpy(), train_data.y.detach().cpu().numpy())
 
         train_loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # gradient clipping
         if epoch % args["gradient_activ_save_freq"] == 0:
             model.plot_grad_flow(grads_path, epoch, iter=0)
-            # model.visualize_gradients(grads_path, epoch, iter=0)
-            # model.visualize_activations(activ_path, train_data, epoch, iter=0)
+            model.visualize_gradients(grads_path, epoch, iter=0)
+            model.visualize_activations(activ_path, train_data, epoch, iter=0)
         optimizer.step()
 
         # Test
@@ -69,8 +70,8 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
             out = model(test_data)
             # pred = (out.squeeze(-1) > 0.5).float()
             pred = torch.argmax(out, dim=1)
-            test_loss = criterion(out, test_data.y.long())
-            test_accuracy = accuracy(pred.detach().numpy(), test_data.y.detach().numpy())
+            test_loss = criterion(out, test_data.y.long().to(device))
+            test_accuracy = accuracy(pred.detach().cpu().numpy(), test_data.y.detach().cpu().numpy())
         
         epoch_acc_str = "Epoch {:05d} | Train Loss {:.4f}; Acc {:.4f} | Test Loss {:.4f} | Acc {:.4f} " \
             .format(epoch, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy)
@@ -117,7 +118,7 @@ if __name__ == "__main__":
         "dropout": 0.0,
         "epochs": 150,
         "feature_repeats": 716,
-        "gradient_activ_save_freq": 50,
+        "gradient_activ_save_freq": 20,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
         "noise_std": 0.3,

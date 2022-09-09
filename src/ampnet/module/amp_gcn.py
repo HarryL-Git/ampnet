@@ -66,7 +66,7 @@ class AMPGCN(torch.nn.Module):
         # For Block 1
         # self.layer_norm1 = nn.LayerNorm(
         #     self.emb_dim,
-        #     elementwise_affine=False
+        #     elementwise_affine=False  # Masked AutoEncoder has this to True, Pytorch default
         # )
 
         # self.layer_norm2 = nn.LayerNorm(
@@ -119,9 +119,9 @@ class AMPGCN(torch.nn.Module):
     def normalize_features_and_add_feature_table_embedding(self, x):
         # Use StandardScaler (z-scoring) to normalize two XOR features, transform to torch tensor
         scaler = StandardScaler()
-        x_ = scaler.fit_transform(x.numpy())
+        x_ = scaler.fit_transform(x.cpu().numpy())
         x_ = torch.from_numpy(x_)
-        x_ = x_.requires_grad_(True)
+        x_ = x_.to(self.device).requires_grad_(True)
 
         if self.downsampling_vectors:
             # x shape: [num_nodes, 1433]
@@ -208,15 +208,20 @@ class AMPGCN(torch.nn.Module):
         return node_vectors_rolled_up, sampled_indices
 
     def forward(self, data):
-        x, edge_index = data.x, data.edge_index
+        x, edge_index = data.x.to(self.device), data.edge_index.to(self.device)
         edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
-        # x, sampled_indices = self.normalize_features_and_add_pca_feature_embedding(x.to("cpu"))
-        x = self.normalize_features_and_add_feature_table_embedding(x.to("cpu"))
+        # x, sampled_indices = self.normalize_features_and_add_pca_feature_embedding(x.to(self.device))
+        x = self.normalize_features_and_add_feature_table_embedding(x)
         x = x.to(self.device)
 
         x = self.drop1(x)
         x = self.conv1(x, edge_index)
         self.conv1_embedding = x
+        # Layer normalization
+        # x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+        # x = self.layer_norm1(x)
+        # x = torch.reshape(x, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+
         x = F.elu(x)
 
         # x = self.drop2(x)
@@ -309,15 +314,22 @@ class AMPGCN(torch.nn.Module):
         activations = {}
         self.eval()
         with torch.no_grad():
-            x, edge_index = data.x, data.edge_index  # x: [num_nodes, 1433]
-            # x, sampled_indices = self.normalize_features_and_add_pca_feature_embedding(x.to("cpu"))
-            x = self.normalize_features_and_add_feature_table_embedding(x.to("cpu"))
+            x, edge_index = data.x.to(self.device), data.edge_index.to(self.device)  # x: [num_nodes, 1433]
+            edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
+            # x, sampled_indices = self.normalize_features_and_add_pca_feature_embedding(x.to(self.device))
+            x = self.normalize_features_and_add_feature_table_embedding(x)
             x = x.to(self.device)
 
             x = self.drop1(x)
             x = self.conv1(x, edge_index)
             activations["AmpConv 1"] = x.view(-1).cpu().numpy()
             self.conv1_embedding = x
+            # Layer normalization
+            # x = torch.reshape(x, (x.shape[0], int(x.shape[1] / self.emb_dim), self.emb_dim))
+            # x = self.layer_norm1(x)
+            # activations["LayerNorm 1"] = x.view(-1).cpu().numpy()
+            # x = torch.reshape(x, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
+
             x = F.elu(x)
             activations["ELU 1"] = x.view(-1).cpu().numpy()
 
@@ -342,7 +354,7 @@ class AMPGCN(torch.nn.Module):
             activations["Linear Out"] = x.view(-1).cpu().numpy()
 
         # Plotting
-        columns = 4
+        columns = 2
         rows = math.ceil(len(activations)/columns)
         fig, ax = plt.subplots(rows, columns, figsize=(columns*2.7, rows*2.5))
         fig_index = 0
@@ -405,7 +417,7 @@ return F.log_softmax(x, dim=1)
 
 Corresponding visualize_activations forward pass
 x, edge_index = data.x, data.edge_index  # x: [num_nodes, 1433]
-x, sampled_indices = self.embed_features_and_downsample(x.to("cpu"))
+x, sampled_indices = self.embed_features_and_downsample(x.to(self.device))
 x = x.to(self.device)
 # x becomes [num_nodes, num_feats * emb_dim], sampled_indices are [num_nodes, 20]
 
