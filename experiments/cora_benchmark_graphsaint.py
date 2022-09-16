@@ -1,9 +1,11 @@
 import os
 import math
 import time
+import random
 import datetime
 
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
@@ -15,11 +17,15 @@ from src.ampnet.module.amp_gcn import AMPGCN
 os.chdir("..")  # Change current working directory to parent directory of GitHub repository
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+torch.manual_seed(0)
+random.seed(0)
+np.random.seed(0)
+
 
 # Global variables
 TRAIN_AMPCONV = True  # If False, trains a simple 2-layer GCN
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cpu')
 dataset = Planetoid(root='/tmp/Cora', name='Cora')
 all_data = dataset[0]
 
@@ -50,12 +56,12 @@ if not os.path.exists(ACTIV_PATH):
 
 if TRAIN_AMPCONV:
     model = AMPGCN(
-            device="cpu", 
+            device=device,
             embedding_dim=128, 
             num_heads=4,
-            num_node_features=1432, 
+            num_node_features=1433,
             num_sampled_vectors=20,
-            output_dim=2, 
+            output_dim=7,
             softmax_out=True, 
             feat_emb_dim=127, 
             val_emb_dim=1,
@@ -63,11 +69,14 @@ if TRAIN_AMPCONV:
             average_pooling_flag=True,
             dropout_rate=0.0,
             dropout_adj_rate=0.0,
-            feature_repeats=716)
+            feature_repeats=None).to(device)
 else:
     model = GCN().to(device)
 
-loader = GraphSAINTRandomWalkSampler(all_data, batch_size=10, walk_length=150,
+# batch size 1, walk length 500 => ~225 nodes
+# batch size 20, walk length 100 => ~750 nodes
+# batch size 10, walk length 100 => ~500 nodes
+loader = GraphSAINTRandomWalkSampler(all_data, batch_size=8, walk_length=150,
                                      num_steps=10, sample_coverage=100)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=5e-4)
@@ -77,7 +86,7 @@ train_acc_list = []
 test_loss_list = []
 test_acc_list = []
 
-epochs = 15
+epochs = 30
 for epoch in range(epochs):
 
     total_loss = total_examples = 0
@@ -90,16 +99,16 @@ for epoch in range(epochs):
 
         # edge_weight = data.edge_norm * data.edge_weight
         out = model(data)
-        train_loss = F.nll_loss(out, data.y, reduction='none')
+        train_loss = F.nll_loss(out, data.y.to(device), reduction='none')
         train_loss = (train_loss * data.node_norm)[data.train_mask].sum()
         train_accuracy = accuracy(out[data.train_mask].argmax(dim=1).cpu().numpy(),
                                     data.y[data.train_mask].detach().cpu().numpy())
         
         train_loss.backward()
-        # if idx % 4 == 0:
-        #     model.plot_grad_flow(GRADS_PATH, epoch, idx)
-        #     model.visualize_gradients(GRADS_PATH, epoch, idx)
-        #     model.visualize_activations(ACTIV_PATH, data, epoch, idx)
+        if idx % 4 == 0:
+            model.plot_grad_flow(GRADS_PATH, epoch, idx)
+            model.visualize_gradients(GRADS_PATH, epoch, idx)
+            model.visualize_activations(ACTIV_PATH, data, epoch, idx)
         optimizer.step()
         total_loss += train_loss.item() * data.num_nodes
         total_examples += data.num_nodes
@@ -109,7 +118,7 @@ for epoch in range(epochs):
         ########
         model.eval()
         with torch.no_grad():
-            test_loss = F.nll_loss(out, data.y, reduction='none')
+            test_loss = F.nll_loss(out, data.y.to(device), reduction='none')
             test_loss = (test_loss * data.node_norm)[data.test_mask].sum()
             test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).cpu().numpy(),
                                         data.y[data.test_mask].detach().cpu().numpy())
@@ -133,6 +142,6 @@ else:
 model.eval()
 with torch.no_grad():
     pred = model(all_data).argmax(dim=1)
-    correct = (pred[all_data.test_mask] == all_data.y[all_data.test_mask]).sum()
-    acc = int(correct) / int(all_data.test_mask.sum())
+    correct = (pred[all_data.test_mask].cpu() == all_data.y[all_data.test_mask].cpu()).sum()
+    acc = int(correct) / int(all_data.test_mask.cpu().sum())
 print(f'Final Test Accuracy: {acc:.4f}')

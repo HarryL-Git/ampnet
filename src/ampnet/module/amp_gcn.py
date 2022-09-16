@@ -54,7 +54,7 @@ class AMPGCN(torch.nn.Module):
 
         # num_flattened_features = self.num_sampled_vectors * self.emb_dim if downsample_feature_vectors else dataset.num_node_features * self.emb_dim
         self.feature_embedding_table = nn.Embedding(
-            num_embeddings=num_node_features // feature_repeats,  # 2 features repeated 5 times
+            num_embeddings=num_node_features,  #  XOR: // feature_repeats
             embedding_dim=feat_emb_dim
         )
         # self.mask_token = nn.Parameter(torch.zeros(1, embedding_dim))
@@ -126,17 +126,39 @@ class AMPGCN(torch.nn.Module):
         if self.downsampling_vectors:
             # x shape: [num_nodes, 1433]
             sampled_node_vectors_unrolled = []
-            for node_idx in range(x_.shape[0]):
-                # present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
-                feat_idxs = list(range(self.num_node_features))
-                sampled_feature_idxs = np.random.choice(feat_idxs, size=self.num_sampled_vectors, replace=True)
-                # sampled_vectors = self.feature_embedding_table.weight[feat_idxs]  # [num_sampled_vectors, emb_dim]
-                sampled_vectors = torch.tile(self.feature_embedding_table.weight, [self.feature_repeats, 1])[sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
-                sampled_vectors = torch.cat((sampled_vectors, x_[node_idx, sampled_feature_idxs].unsqueeze(-1)), dim=1)
-                sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
+            sampled_indices = []
 
+            for node_idx in range(x.shape[0]):
+                present_feat_idxs = torch.where(x[node_idx] != 0)[0]
+                unpresent_indices_len = self.num_node_features - len(present_feat_idxs)
+
+                sampling_probs = [0.5 / len(present_feat_idxs) if idx in present_feat_idxs else 0.5 / unpresent_indices_len for idx in range(self.num_node_features)]
+                feat_indices = list(range(self.num_node_features))
+                sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False,
+                                                        p=sampling_probs)
+                sampled_vectors = self.feature_embedding_table.weight[sampled_feature_idxs]
+                sampled_vectors = torch.cat((sampled_vectors, x_[node_idx, sampled_feature_idxs].unsqueeze(-1)), dim=1)
+
+                sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
+                sampled_indices.append(np.expand_dims(sampled_feature_idxs, axis=0))
             sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
-            node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
+            sampled_indices = np.concatenate(sampled_indices)
+            node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled,
+                                                  (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
+
+            # Uncomment for XOR synthetic benchmark implementation
+            # sampled_node_vectors_unrolled = []
+            # for node_idx in range(x_.shape[0]):
+            #     present_feat_idxs = torch.where(x[node_idx] != 0)[0].numpy()
+            #     feat_idxs = list(range(self.num_node_features))
+            #     sampled_feature_idxs = np.random.choice(feat_idxs, size=self.num_sampled_vectors, replace=True)
+            #     # sampled_vectors = self.feature_embedding_table.weight[feat_idxs]  # [num_sampled_vectors, emb_dim]
+            #     sampled_vectors = torch.tile(self.feature_embedding_table.weight, [self.feature_repeats, 1])[sampled_feature_idxs]  # [num_sampled_vectors, emb_dim]
+            #     sampled_vectors = torch.cat((sampled_vectors, x_[node_idx, sampled_feature_idxs].unsqueeze(-1)), dim=1)
+            #     sampled_node_vectors_unrolled.append(sampled_vectors.unsqueeze(dim=0))
+            #
+            # sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
+            # node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
         else:
             # Add feature embedding from table to each feature in each node
             node_vectors_unrolled = []
@@ -222,7 +244,8 @@ class AMPGCN(torch.nn.Module):
         # x = self.layer_norm1(x)
         # x = torch.reshape(x, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
 
-        x = F.elu(x)
+        # x = F.elu(x)
+        x = F.relu(x)
 
         # x = self.drop2(x)
         # x = self.conv2(x, edge_index)
@@ -330,8 +353,9 @@ class AMPGCN(torch.nn.Module):
             # activations["LayerNorm 1"] = x.view(-1).cpu().numpy()
             # x = torch.reshape(x, (x.shape[0], self.num_sampled_vectors * self.emb_dim))
 
-            x = F.elu(x)
-            activations["ELU 1"] = x.view(-1).cpu().numpy()
+            # x = F.elu(x)
+            x = F.relu(x)
+            activations["ReLU 1"] = x.view(-1).cpu().numpy()
 
             # x = self.drop2(x)
             # x = self.conv2(x, edge_index)
