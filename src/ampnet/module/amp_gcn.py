@@ -96,17 +96,17 @@ class AMPGCN(torch.nn.Module):
         #     elementwise_affine=False
         # )
 
-        # self.conv2 = AMPConv(
-        #     embed_dim=embedding_dim,
-        #     num_heads=num_heads
-        # )
+        self.conv2 = AMPConv(
+            embed_dim=embedding_dim,
+            num_heads=num_heads
+        )
 
         # self.post_conv_linear2 = nn.Linear(
         #     in_features=self.emb_dim,
         #     out_features=self.emb_dim
         # )
 
-        # self.drop2 = nn.Dropout(p=dropout_rate)
+        self.drop2 = nn.Dropout(p=dropout_rate)
 
         self.final_linear_out = nn.Linear(
             in_features=self.emb_dim,
@@ -247,10 +247,11 @@ class AMPGCN(torch.nn.Module):
         # x = F.elu(x)
         x = F.relu(x)
 
-        # x = self.drop2(x)
-        # x = self.conv2(x, edge_index)
-        # self.conv2_embedding = x
+        x = self.drop2(x)
+        x = self.conv2(x, edge_index)
+        self.conv2_embedding = x
         # x = F.elu(x)
+        x = F.relu(x)
 
         x = self.drop3(x)
         # Reshape node features into unrolled list of feature vectors, perform average pooling
@@ -357,12 +358,14 @@ class AMPGCN(torch.nn.Module):
             x = F.relu(x)
             activations["ReLU 1"] = x.view(-1).cpu().numpy()
 
-            # x = self.drop2(x)
-            # x = self.conv2(x, edge_index)
-            # activations["AmpConv 2"] = x.view(-1).cpu().numpy()
-            # self.conv2_embedding = x
+            x = self.drop2(x)
+            x = self.conv2(x, edge_index)
+            activations["AmpConv 2"] = x.view(-1).cpu().numpy()
+            self.conv2_embedding = x
             # x = F.elu(x)
             # activations["ELU 1"] = x.view(-1).cpu().numpy()
+            x = F.relu(x)
+            activations["ReLU 1"] = x.view(-1).cpu().numpy()
 
             x = self.drop3(x)
             # Reshape node features into unrolled list of feature vectors, perform average pooling
