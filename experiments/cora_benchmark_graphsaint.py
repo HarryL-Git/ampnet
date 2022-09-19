@@ -17,9 +17,10 @@ from src.ampnet.module.amp_gcn import AMPGCN
 os.chdir("..")  # Change current working directory to parent directory of GitHub repository
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-torch.manual_seed(0)
-random.seed(0)
-np.random.seed(0)
+seed = 1
+torch.manual_seed(seed)
+random.seed(seed)
+np.random.seed(seed)
 
 
 # Global variables
@@ -86,7 +87,7 @@ train_acc_list = []
 test_loss_list = []
 test_acc_list = []
 
-epochs = 50
+epochs = 100
 for epoch in range(epochs):
 
     total_loss = total_examples = 0
@@ -130,6 +131,13 @@ for epoch in range(epochs):
         test_loss_list.append(test_loss.item())
         test_acc_list.append(test_accuracy)
 
+    # Save model checkpoint every 10 epochs
+    if epoch % 10 == 0:
+        torch.save({
+            'epoch': epochs,
+            'model_state_dict': model.state_dict(),
+            'validation_loss': test_loss.item()
+        }, os.path.join(SAVE_PATH, "model_checkpoint_ep{}.pth".format(epoch)))
 
 print("Training took {} minutes.".format((time.time() - start_time) / 60.))
 if TRAIN_AMPCONV:
@@ -138,6 +146,12 @@ if TRAIN_AMPCONV:
 else:
     plot_loss_curves(train_loss_list, test_loss_list, epoch_count=len(train_loss_list), save_path=SAVE_PATH, model_name="GCN")
     plot_acc_curves(train_acc_list, test_acc_list, epoch_count=len(train_acc_list), save_path=SAVE_PATH, model_name="GCN")
+
+torch.save({
+    'epoch': epochs,
+    'model_state_dict': model.state_dict(),
+    'validation_loss': test_loss.item()
+}, os.path.join(SAVE_PATH, "final_model.pth"))
 
 model.eval()
 with torch.no_grad():

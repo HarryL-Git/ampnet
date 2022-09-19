@@ -58,6 +58,7 @@ class AMPGCN(torch.nn.Module):
             embedding_dim=feat_emb_dim
         )
         # self.mask_token = nn.Parameter(torch.zeros(1, embedding_dim))
+        self.sampled_node_feat_indices = None
 
         if not average_pooling_flag:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, self.emb_dim))
@@ -129,13 +130,18 @@ class AMPGCN(torch.nn.Module):
             sampled_indices = []
 
             for node_idx in range(x.shape[0]):
+                # Sampling only from present features
                 present_feat_idxs = torch.where(x[node_idx] != 0)[0]
-                unpresent_indices_len = self.num_node_features - len(present_feat_idxs)
+                sampled_feature_idxs = np.random.choice(present_feat_idxs.cpu().numpy(), size=self.num_sampled_vectors, replace=True)
 
-                sampling_probs = [0.5 / len(present_feat_idxs) if idx in present_feat_idxs else 0.5 / unpresent_indices_len for idx in range(self.num_node_features)]
-                feat_indices = list(range(self.num_node_features))
-                sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False,
-                                                        p=sampling_probs)
+                # Uncomment to sample balanced present and non-present features
+                # present_feat_idxs = torch.where(x[node_idx] != 0)[0]
+                # unpresent_indices_len = self.num_node_features - len(present_feat_idxs)
+                # sampling_probs = [0.5 / len(present_feat_idxs) if idx in present_feat_idxs else 0.5 / unpresent_indices_len for idx in range(self.num_node_features)]
+                # feat_indices = list(range(self.num_node_features))
+                # sampled_feature_idxs = np.random.choice(feat_indices, size=self.num_sampled_vectors, replace=False,
+                #                                         p=sampling_probs)
+
                 sampled_vectors = self.feature_embedding_table.weight[sampled_feature_idxs]
                 sampled_vectors = torch.cat((sampled_vectors, x_[node_idx, sampled_feature_idxs].unsqueeze(-1)), dim=1)
 
@@ -161,6 +167,7 @@ class AMPGCN(torch.nn.Module):
             # node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
         else:
             # Add feature embedding from table to each feature in each node
+            sampled_indices = None
             node_vectors_unrolled = []
             for node_idx in range(x_.shape[0]):
                 x_embed = torch.cat((
@@ -173,7 +180,7 @@ class AMPGCN(torch.nn.Module):
             node_vectors_rerolled = torch.reshape(node_vectors_unrolled, (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
 
         node_vectors_rerolled = node_vectors_rerolled.requires_grad_(True)
-        return node_vectors_rerolled
+        return node_vectors_rerolled, sampled_indices
 
     def normalize_features_and_add_pca_feature_embedding(self, x):
         assert self.emb_dim == self.feat_emb_dim + self.val_emb_dim, "feat and val emb dim must match self.emb_dim"
@@ -233,7 +240,8 @@ class AMPGCN(torch.nn.Module):
         x, edge_index = data.x.to(self.device), data.edge_index.to(self.device)
         edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
         # x, sampled_indices = self.normalize_features_and_add_pca_feature_embedding(x.to(self.device))
-        x = self.normalize_features_and_add_feature_table_embedding(x)
+        x, sampled_indices = self.normalize_features_and_add_feature_table_embedding(x)
+        self.sampled_node_feat_indices = sampled_indices
         x = x.to(self.device)
 
         x = self.drop1(x)
@@ -341,7 +349,8 @@ class AMPGCN(torch.nn.Module):
             x, edge_index = data.x.to(self.device), data.edge_index.to(self.device)  # x: [num_nodes, 1433]
             edge_index = dropout_adj(edge_index=edge_index, p=self.dropout_adj_rate, training=self.training)[0]
             # x, sampled_indices = self.normalize_features_and_add_pca_feature_embedding(x.to(self.device))
-            x = self.normalize_features_and_add_feature_table_embedding(x)
+            x, sampled_indices = self.normalize_features_and_add_feature_table_embedding(x)
+            self.sampled_node_feat_indices = sampled_indices
             x = x.to(self.device)
 
             x = self.drop1(x)
