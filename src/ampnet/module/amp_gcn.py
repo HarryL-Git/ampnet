@@ -166,7 +166,7 @@ class AMPGCN(torch.nn.Module):
             # sampled_node_vectors_unrolled = torch.cat(sampled_node_vectors_unrolled)
             # node_vectors_rerolled = torch.reshape(sampled_node_vectors_unrolled, (x_.shape[0], self.num_sampled_vectors * self.emb_dim))
         else:
-            # Add feature embedding from table to each feature in each node
+            # XOR implementation Add feature embedding from table to each feature in each node
             sampled_indices = None
             node_vectors_unrolled = []
             for node_idx in range(x_.shape[0]):

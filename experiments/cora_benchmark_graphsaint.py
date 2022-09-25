@@ -80,7 +80,7 @@ else:
 loader = GraphSAINTRandomWalkSampler(all_data, batch_size=8, walk_length=150,
                                      num_steps=10, sample_coverage=100)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)  # 5e-4
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 start_time = time.time()
 train_loss_list = []
 train_acc_list = []

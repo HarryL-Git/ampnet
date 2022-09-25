@@ -72,7 +72,7 @@ def create_duplicated_xor_data(
     # Create binary adjacency matrix
     adj_matrix = np.zeros(shape=(num_samples, num_samples), dtype=np.uint8)
     for row in range(indices.shape[0]):
-        for col in range(1, indices.shape[1]):
+        for col in range(0, indices.shape[1]):  # ToDo: Note, previous mistake was ignoring self-loops by starting at idx 1
             adj_matrix[row,indices[row,col]] = 1
     # for row in range(num_samples):
     #     for col in range(num_samples):
@@ -166,6 +166,7 @@ def create_xor_data(
 
 
 def plot_node_features(node_features, labels, save_path=None, save_name=None):
+    plt.rcParams.update({'font.size': 18})
     scatter = plt.scatter(x=node_features[:,0], y=node_features[:,1], c=labels, cmap="winter")
     plt.title("Fuzzy XOR Node Features")
     plt.xlabel("Feature 1")
@@ -201,15 +202,13 @@ if __name__ == "__main__":
     # For debugging purposes
     # x, y, adj_matrix, edge_idx_arr = create_xor_data(num_samples=20, noise_std=0.3, same_class_link_prob=0.7, diff_class_link_prob=0.1)
     x, y, adj_matrix, edge_idx_arr = create_duplicated_xor_data(
-        num_samples=40, 
-        noise_std=0.25,
+        num_samples=400, 
+        noise_std=0.3,
         num_nearest_neighbors=10,
-        same_class_link_prob=0.8, 
-        diff_class_link_prob=0.05, 
         feature_repeats=1
     )
     print("Node features:\n", x, "\n")
     print("Labels:\n", y, "\n")
     print("Adjacency Matrix:\n", adj_matrix, "\n")
-    plot_node_features(node_features=x, labels=y)
+    plot_node_features(node_features=x, labels=y, save_path="./", save_name="xor_node_feat_visual.png")
     plot_graph(adj_matrix, labels=y)

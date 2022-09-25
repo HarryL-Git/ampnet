@@ -85,6 +85,14 @@ def train_model(args, save_path, grads_path, activ_path, logfile=None):
         test_loss_list.append(test_loss.item())
         test_acc_list.append(test_accuracy)
 
+        # Save model checkpoint every 20 epochs
+        if epoch % 20 == 0:
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'validation_loss': test_loss.item()
+            }, os.path.join(SAVE_PATH, "model_checkpoint_ep{}.pth".format(epoch)))
+
     plot_loss_curves(
         train_loss_list, 
         test_loss_list, 
@@ -116,8 +124,8 @@ if __name__ == "__main__":
     ARGS = {
         # "diff_class_link_prob": 0.05,
         "dropout": 0.0,
-        "epochs": 150,
-        "feature_repeats": 716,
+        "epochs": 200,
+        "feature_repeats": 1,
         "gradient_activ_save_freq": 20,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
