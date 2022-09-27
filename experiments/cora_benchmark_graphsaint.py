@@ -6,7 +6,7 @@ import datetime
 
 import torch
 import numpy as np
-import torch.nn as nn
+import torch.optim as optim
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
@@ -77,17 +77,19 @@ else:
 # batch size 1, walk length 500 => ~225 nodes
 # batch size 20, walk length 100 => ~750 nodes
 # batch size 10, walk length 100 => ~500 nodes
+num_steps = 200
 loader = GraphSAINTRandomWalkSampler(all_data, batch_size=8, walk_length=150,
-                                     num_steps=10, sample_coverage=100)
+                                     num_steps=num_steps, sample_coverage=100)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.1, weight_decay=1e-4)
+scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=400, T_mult=2)
 start_time = time.time()
 train_loss_list = []
 train_acc_list = []
 test_loss_list = []
 test_acc_list = []
 
-epochs = 100
+epochs = 10000 // num_steps
 for epoch in range(epochs):
 
     total_loss = total_examples = 0
@@ -111,6 +113,7 @@ for epoch in range(epochs):
             model.visualize_gradients(GRADS_PATH, epoch, idx)
             model.visualize_activations(ACTIV_PATH, data, epoch, idx)
         optimizer.step()
+        scheduler.step()
         total_loss += train_loss.item() * data.num_nodes
         total_examples += data.num_nodes
 
@@ -124,8 +127,8 @@ for epoch in range(epochs):
             test_accuracy = accuracy(out[data.test_mask].argmax(dim=1).cpu().numpy(),
                                         data.y[data.test_mask].detach().cpu().numpy())
 
-        print("Epoch {:05d} Partition {:05d} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} "
-                .format(epoch, idx, train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))
+        print("Epoch {:05d} Partition {:05d} LR {:.05f} | Train NLL Loss {:.4f}; Acc {:.4f} | Test NLL Loss {:.4f}; Acc {:.4f} "
+                .format(epoch, idx, float(scheduler.get_last_lr()[0]), train_loss.item(), train_accuracy, test_loss.item(), test_accuracy))
         train_loss_list.append(train_loss.item())
         train_acc_list.append(train_accuracy)
         test_loss_list.append(test_loss.item())

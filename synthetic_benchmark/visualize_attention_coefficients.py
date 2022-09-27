@@ -79,16 +79,16 @@ def plot_attn_weights(edge_attn_weights_matrix, graph_data, fig_save_path):
         if len(df_dict[key]) == 0:
             continue
         edge_coeffs_df = pd.DataFrame({
-            "Dst Feat 1 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],0,0],
-            "Dst Feat 1 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],0,1],
-            "Dst Feat 2 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],1,0],
-            "Dst Feat 2 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],1,1]
+            "Dst Feat 1 attend to \nSrc Feat 1": edge_attn_weights_matrix[df_dict[key],0,0],
+            "Dst Feat 1 attend to \nSrc Feat 2": edge_attn_weights_matrix[df_dict[key],0,1],
+            "Dst Feat 2 attend to \nSrc Feat 1": edge_attn_weights_matrix[df_dict[key],1,0],
+            "Dst Feat 2 attend to \nSrc Feat 2": edge_attn_weights_matrix[df_dict[key],1,1]
         })
         edge_coeffs_df_melted = pd.melt(edge_coeffs_df, var_name="Relationship")
 
         sns.set_theme()
         g = sns.FacetGrid(edge_coeffs_df_melted, col="Relationship", col_wrap=2, sharex=True, sharey=True, height=4)
-        g.map(plt.hist, "value", alpha=.4, bins=np.arange(-4.0, 4.05, 0.4))
+        g.map(plt.hist, "value", alpha=.4, bins=np.arange(0, 1.05, 0.1))
         g.set_ylabels('Count')
         g.fig.subplots_adjust(top=0.9)
         g.fig.suptitle(key)
