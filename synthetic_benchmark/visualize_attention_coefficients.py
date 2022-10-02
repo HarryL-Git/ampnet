@@ -79,16 +79,16 @@ def plot_attn_weights(edge_attn_weights_matrix, graph_data, fig_save_path):
         if len(df_dict[key]) == 0:
             continue
         edge_coeffs_df = pd.DataFrame({
-            "Dst Feat 1 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],0,0],
-            "Dst Feat 1 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],0,1],
-            "Dst Feat 2 attend to Src Feat 1": edge_attn_weights_matrix[df_dict[key],1,0],
-            "Dst Feat 2 attend to Src Feat 2": edge_attn_weights_matrix[df_dict[key],1,1]
+            "Dst Feat 1 attend to \nSrc Feat 1": edge_attn_weights_matrix[df_dict[key],0,0],
+            "Dst Feat 1 attend to \nSrc Feat 2": edge_attn_weights_matrix[df_dict[key],0,1],
+            "Dst Feat 2 attend to \nSrc Feat 1": edge_attn_weights_matrix[df_dict[key],1,0],
+            "Dst Feat 2 attend to \nSrc Feat 2": edge_attn_weights_matrix[df_dict[key],1,1]
         })
         edge_coeffs_df_melted = pd.melt(edge_coeffs_df, var_name="Relationship")
 
         sns.set_theme()
         g = sns.FacetGrid(edge_coeffs_df_melted, col="Relationship", col_wrap=2, sharex=True, sharey=True, height=4)
-        g.map(plt.hist, "value", alpha=.4, bins=np.arange(-4.0, 4.05, 0.4))
+        g.map(plt.hist, "value", alpha=.4, bins=np.arange(0, 1.05, 0.1))
         g.set_ylabels('Count')
         g.fig.subplots_adjust(top=0.9)
         g.fig.suptitle(key)
@@ -195,7 +195,8 @@ def plot_attn_weights_duplicate_features(edge_attn_weights_matrix, graph_data, f
 
 def visualize_attention_coefficients(args, save_path):
     # Define model - load from ran experiment
-    model = get_model(args["model_name"], args["dropout"])
+    device = 'cpu'
+    model = get_model(args["model_name"], args["dropout"], args, device)
     checkpoint = torch.load(os.path.join(args["experiment_load_dir_path"], args["experiment_load_name"], "final_model.pth"))
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -240,13 +241,13 @@ def main():
         # "diff_class_link_prob": 0.05,
         "dropout": 0.0,
         "epochs": 200,
-        "feature_repeats": 5,
-        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/2022-08-25-12_23_19_search",
-        "experiment_load_name": "2022-08-25-12_49_54_102_0.6",
+        "feature_repeats": 1,
+        "experiment_load_dir_path": "./synthetic_benchmark/runs_AMPNet/",
+        "experiment_load_name": "2022-09-23-05_18_50",
         "gradient_activ_save_freq": 50,
         "learning_rate": 0.01,
         "model_name": "AMPNet",
-        "noise_std": 0.4,
+        "noise_std": 0.3,
         "num_nearest_neighbors": 10,
         "num_samples": 400,
         # "same_class_link_prob": 0.5,

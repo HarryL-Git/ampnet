@@ -3,7 +3,6 @@ import time
 import datetime
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
 from src.ampnet.utils.utils import *
@@ -15,7 +14,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train_model(args, save_path, grads_path, activ_path, logfile=None):
     # Define model
-    model = get_model(args["model_name"], args["dropout"], args)
+    model = get_model(args["model_name"], args["dropout"], args, device)
     model.to(device)
 
     # Freeze all but last linear classifier layer
